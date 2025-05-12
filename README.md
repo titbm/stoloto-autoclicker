@@ -2,7 +2,7 @@
 
 Расширение Chrome для автоматического поиска билетов с заданными числами на сайте Столото.
 
-[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/titbm/stoloto-autoclicker/releases)
+[![Version](https://img.shields.io/badge/version-1.0.8-blue.svg)](https://github.com/titbm/stoloto-autoclicker/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ## Возможности
