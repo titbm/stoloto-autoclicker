@@ -1,7 +1,6 @@
 ﻿{
-  "manifest_version": 3,
-  "name": "Столото Автокликер",
-  "version": "1.0.2",
+  "manifest_version": 3,  "name": "Столото Автокликер",
+  "version": "1.0.4",
   "description": "Автоматический поиск билетов с заданными числами на сайте Столото",
   "author": "titbm",
   "homepage_url": "https://github.com/titbm/stoloto-autoclicker",

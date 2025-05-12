@@ -1,6 +1,74 @@
+// Сообщаем о загрузке скрипта
+console.log('Столото Автокликер: content script загружен');
+
+// Стили для блока состояния
+const STATUS_STYLES = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: #007bff;
+    color: white;
+    padding: 10px 20px;
+    font-size: 16px;
+    z-index: 10000;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+`;
+
+// Функция для создания/обновления блока состояния
+function updateStatusBlock(numbers, excludeNumbers, mode) {
+    let statusEl = document.getElementById('rusloto-status');
+    if (!statusEl) {
+        statusEl = document.createElement('div');
+        statusEl.id = 'rusloto-status';
+        statusEl.style.cssText = STATUS_STYLES;
+        document.body.insertBefore(statusEl, document.body.firstChild);
+    }
+
+    let modeText = '';
+    switch(mode) {
+        case 'anywhere':
+            modeText = 'в любом месте билета';
+            break;
+        case 'half':
+            modeText = 'в одной половине билета';
+            break;
+        case 'row':
+            modeText = 'в одной строке билета';
+            break;
+    }
+
+    const numbersText = numbers.join(', ');
+    const excludeText = excludeNumbers.length > 0 
+        ? ` за исключением ${excludeNumbers.join(', ')}` 
+        : '';    const ticketsText = ticketsChecked > 0 ? `. Проверено билетов: ${ticketsChecked}` : '';
+    const timeText = searchStartTime ? `. Время поиска: ${formatSearchTime()}` : '';
+    statusEl.textContent = `Ищем числа ${numbersText}${excludeText} ${modeText}${ticketsText}${timeText}`;
+}
+
+// Функция для удаления блока состояния
+function removeStatusBlock() {
+    const statusEl = document.getElementById('rusloto-status');
+    if (statusEl) {
+        statusEl.remove();
+    }
+}
+
 // Флаг для отслеживания состояния поиска
 let isSearching = false;
 let searchMode = 'half'; // Режим поиска по умолчанию
+let ticketsChecked = 0; // Счетчик просмотренных билетов
+let searchStartTime = null; // Время начала поиска
+
+// Функция для форматирования времени
+function formatSearchTime() {
+    if (!searchStartTime) return '';
+    const seconds = Math.floor((Date.now() - searchStartTime) / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}м ${remainingSeconds}с`;
+}
 
 // Функция очистки выбранных чисел
 async function clearSelection() {
@@ -22,6 +90,9 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
     console.log('Начинаем работу с числами:', numbers, 'исключая:', excludeNumbers, 'режим:', mode);
     isSearching = true;
     searchMode = mode;
+    ticketsChecked = 0;
+    searchStartTime = Date.now();
+    updateStatusBlock(numbers, excludeNumbers, mode);
 
     // Функция ожидания появления кнопок с числами
     function waitForNumberButtons() {
@@ -175,14 +246,20 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
             // Ищем все билеты
             const tickets = document.querySelectorAll('button[class*="Ticket_btn"]');
             console.log(`\nАнализируем ${tickets.length} билетов...`);
-            
-            // Проверяем каждый билет
+              // Проверяем каждый билет
             for (const ticket of tickets) {
                 if (!isSearching) return false;
-                
+                ticketsChecked++;
+                updateStatusBlock(numbers, excludeNumbers, mode);
                 if (analyzeTicket(ticket, numbers)) {
-                    console.log('🎯 Найден подходящий билет!');
+                    const ticketNumber = ticket.querySelector('[data-test-id="ticket-number"]')?.textContent || 'неизвестен';                    console.log('🎯 Найден подходящий билет!');
                     console.log('Нажимаем на кнопку выбора билета');
+                    let statusEl = document.getElementById('rusloto-status');
+                    if (statusEl) {
+                        const timeSpent = formatSearchTime();
+                        statusEl.textContent = `Подходящий билет найден! Это ${ticketNumber}. Проверено билетов: ${ticketsChecked}, затрачено времени: ${timeSpent}`;
+                        statusEl.style.background = '#28a745'; // Меняем цвет на зеленый для успешного результата
+                    }
                     ticket.click();
                     return true;
                 }
@@ -205,6 +282,7 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
                 break;
             }
         }
+        removeStatusBlock();
         return false;
     }
 
@@ -224,10 +302,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             clickNumbers(request.numbers, request.mode, request.excludeNumbers || []);
             sendResponse({status: 'success'});
         });
-        return true;
-    } else if (request.action === 'stopSearch') {
+        return true;    } else if (request.action === 'stopSearch') {
         console.log('Останавливаем поиск и обновляем страницу...');
         isSearching = false;
+        searchStartTime = null;
+        removeStatusBlock();
         // Сначала очищаем выбранные числа
         clearSelection().then(() => {
             sendResponse({status: 'stopped'});
