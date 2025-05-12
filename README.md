@@ -2,7 +2,7 @@
 
 Расширение Chrome для автоматического поиска билетов с заданными числами на сайте Столото.
 
-[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/titbm/stoloto-autoclicker/releases)
+[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/titbm/stoloto-autoclicker/releases)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ## Возможности
@@ -59,6 +59,12 @@ git clone https://github.com/titbm/stoloto-autoclicker.git
 - В консоли разработчика (F12) можно видеть подробную информацию о процессе поиска
 
 ## История версий
+
+### v1.0.2 (12 мая 2025)
+- Улучшение: умное поведение иконки расширения
+  - Открытие окна поиска при клике на рабочей странице
+  - Автоматическое открытие рабочей страницы при клике на других вкладках
+- Оптимизация: упрощен манифест, удалены лишние скрипты
 
 ### v1.0.1 (12 мая 2025)
 - Оптимизация: ограничение работы расширения только страницей Русского лото
