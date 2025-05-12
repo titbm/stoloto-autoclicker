@@ -18,9 +18,7 @@ button.addEventListener('click', async () => {
     if (!isSearching) {
         // Начинаем поиск
         const numbers = parseNumbers(numbersInput.value);
-        const excludeNumbers = parseNumbers(excludeNumbersInput.value);
-
-        if (numbers.length === 0) {
+        const excludeNumbers = parseNumbers(excludeNumbersInput.value);        if (numbers.length === 0) {
             alert('Пожалуйста, введите корректные числа от 1 до 90');
             return;
         }
