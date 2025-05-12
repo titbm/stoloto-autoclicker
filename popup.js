@@ -14,11 +14,39 @@ function parseNumbers(input) {
         });
 }
 
+// Функция сохранения параметров поиска
+async function saveSearchParams(numbers, excludeNumbers, mode) {
+    await chrome.storage.local.set({
+        lastSearch: {
+            numbers: numbers,
+            excludeNumbers: excludeNumbers,
+            mode: mode,
+            timestamp: Date.now()
+        }
+    });
+}
+
+// Функция загрузки последних параметров поиска
+async function loadLastSearchParams() {
+    const data = await chrome.storage.local.get('lastSearch');
+    if (data.lastSearch) {
+        numbersInput.value = data.lastSearch.numbers.join(', ');
+        excludeNumbersInput.value = data.lastSearch.excludeNumbers.join(', ');
+        searchMode.value = data.lastSearch.mode;
+    }
+}
+
+// Загружаем последние параметры при открытии popup
+document.addEventListener('DOMContentLoaded', loadLastSearchParams);
+
 button.addEventListener('click', async () => {
     if (!isSearching) {
         // Начинаем поиск
         const numbers = parseNumbers(numbersInput.value);
-        const excludeNumbers = parseNumbers(excludeNumbersInput.value);        if (numbers.length === 0) {
+        const excludeNumbers = parseNumbers(excludeNumbersInput.value);
+        
+        // Сохраняем параметры поиска
+        await saveSearchParams(numbers, excludeNumbers, searchMode.value);if (numbers.length === 0) {
             alert('Пожалуйста, введите корректные числа от 1 до 90');
             return;
         }

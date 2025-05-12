@@ -1,5 +1,5 @@
 ﻿{  "manifest_version": 3,  "name": "Столото Автокликер",
-  "version": "1.0.8","description":"Автоматический поиск билетов с заданными числами на сайте Столото",
+  "version": "1.0.9","description":"Автоматический поиск билетов с заданными числами на сайте Столото",
   "author": "titbm",
   "homepage_url": "https://github.com/titbm/stoloto-autoclicker",  "permissions": ["activeTab", "scripting", "storage", "tabs"],  "icons": {
     "16": "icons/icon16.png",
