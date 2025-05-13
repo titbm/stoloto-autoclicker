@@ -47,6 +47,34 @@
     .mode-select {
       margin-bottom: 10px;
     }
+    .purchase-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 10px;
+      margin-bottom: 10px;
+      width: 100%;
+    }
+    .purchase-controls > label {
+      display: flex; 
+      align-items: center;
+      white-space: nowrap;
+    }
+    .purchase-controls input[type="checkbox"] {
+      width: auto;
+      margin-right: 5px;
+    }
+    .purchase-quantity-group {
+        display: flex;
+        align-items: center;
+    }
+    .purchase-quantity-group label {
+        margin-right: 5px;
+        white-space: nowrap;
+    }
+    .purchase-quantity-group input[type="number"] {
+      width: 60px;
+    }
   </style>
 </head>
 <body>
@@ -54,12 +82,25 @@
   <div class="input-label">Искать числа:</div>
   <input type="text" id="numbers" placeholder="Введите числа через запятую (1-90)">
   <div class="input-label">Исключить числа:</div>
-  <input type="text" id="excludeNumbers" placeholder="Числа, которых не должно быть в билете">  <select id="searchMode" class="mode-select">
+  <input type="text" id="excludeNumbers" placeholder="Числа, которых не должно быть в билете">
+
+  <select id="searchMode" class="mode-select">
     <option value="anywhere" selected>Числа где угодно</option>
     <option value="half">Числа в одной половине</option>
     <option value="row">Числа в одной строке</option>
   </select>
   <button id="startButton">Запустить</button>
+
+  <div class="purchase-controls">
+    <label for="purchaseModeCheckbox">
+      <input type="checkbox" id="purchaseModeCheckbox">Режим покупки
+    </label>
+    <div class="purchase-quantity-group">
+        <label for="ticketsToBuyCount">Кол-во:</label>
+        <input type="number" id="ticketsToBuyCount" value="1" min="1">
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

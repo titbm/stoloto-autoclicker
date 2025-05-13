@@ -16,14 +16,33 @@ const STATUS_STYLES = `
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 `;
 
+// Новые глобальные переменные для режима покупки
+let isPurchaseModeActive = false;
+let ticketsToBuyTotal = 0;
+let ticketsSuccessfullyPurchased = 0;
+let initialSearchParams = {}; // Для сохранения исходных параметров поиска при покупке
+
 // Функция для создания/обновления блока состояния
-function updateStatusBlock(numbers, excludeNumbers, mode) {
+function updateStatusBlock(numbers, excludeNumbers, mode, customMessage = '', isError = false) {
     let statusEl = document.getElementById('rusloto-status');
     if (!statusEl) {
         statusEl = document.createElement('div');
         statusEl.id = 'rusloto-status';
-        statusEl.style.cssText = STATUS_STYLES;
         document.body.insertBefore(statusEl, document.body.firstChild);
+    }
+    statusEl.style.cssText = STATUS_STYLES; // Применяем стили каждый раз
+
+    if (isError) {
+        statusEl.style.background = '#f44336'; // Красный фон для ошибок
+        statusEl.textContent = customMessage;
+        return;
+    } else {
+        statusEl.style.background = '#007bff'; // Стандартный фон
+        if (customMessage) {
+            statusEl.style.background = '#28a745'; // Зеленый фон для успеха
+            statusEl.textContent = customMessage;
+            return;
+        }
     }
 
     let modeText = '';
@@ -42,9 +61,16 @@ function updateStatusBlock(numbers, excludeNumbers, mode) {
     const numbersText = numbers.join(', ');
     const excludeText = excludeNumbers.length > 0 
         ? ` за исключением ${excludeNumbers.join(', ')}` 
-        : '';    const ticketsText = ticketsChecked > 0 ? `. Проверено билетов: ${ticketsChecked}` : '';
+        : '';
+    const ticketsText = ticketsChecked > 0 ? `. Проверено билетов: ${ticketsChecked}` : '';
     const timeText = searchStartTime ? `. Время поиска: ${formatSearchTime()}` : '';
-    statusEl.textContent = `Ищем числа ${numbersText}${excludeText} ${modeText}${ticketsText}${timeText}`;
+    
+    let purchaseStatusText = '';
+    if (isPurchaseModeActive) {
+        purchaseStatusText = `. Куплено: ${ticketsSuccessfullyPurchased} из ${ticketsToBuyTotal}`;
+    }
+    
+    statusEl.textContent = `Ищем числа ${numbersText}${excludeText} ${modeText}${ticketsText}${timeText}${purchaseStatusText}`;
 }
 
 // Функция для удаления блока состояния
@@ -57,9 +83,9 @@ function removeStatusBlock() {
 
 // Флаг для отслеживания состояния поиска
 let isSearching = false;
-let searchMode = 'half'; // Режим поиска по умолчанию
 let ticketsChecked = 0; // Счетчик просмотренных билетов
 let searchStartTime = null; // Время начала поиска
+let currentMode = 'half'; // Для хранения текущего режима поиска/покупки
 
 // Функция для форматирования времени
 function formatSearchTime() {
@@ -85,255 +111,348 @@ async function clearSelection() {
     return false;
 }
 
-// Функция для поиска и клика по кнопкам
-async function clickNumbers(numbers, mode, excludeNumbers = []) {
-    console.log('Начинаем работу с числами:', numbers, 'исключая:', excludeNumbers, 'режим:', mode);
-    isSearching = true;
-    searchMode = mode;
-    ticketsChecked = 0;
-    searchStartTime = Date.now();
-    updateStatusBlock(numbers, excludeNumbers, mode);
-
-    // Функция ожидания появления кнопок с числами
-    function waitForNumberButtons() {
-        return new Promise((resolve) => {
-            const checkButtons = () => {
-                const allButtons = document.querySelectorAll('button');
-                if (allButtons.length > 0) {
-                    resolve();
-                } else {
-                    setTimeout(checkButtons, 500);
-                }
-            };
-            checkButtons();
-        });
-    }
-
-    // Сначала выбираем числа
-    async function selectNumbers() {
-        await waitForNumberButtons();
-        
-        for (const num of numbers) {
-            if (!isSearching) return false;
-
-            const buttons = Array.from(document.querySelectorAll('button'));
-            const button = buttons.find(btn => {
-                const text = btn.textContent.trim();
-                return text === num.toString();
-            });
-            
-            if (button) {
-                console.log('Нажимаем на число:', num);
-                button.click();
-                // Ждем случайное время от 250мс до 1000мс
-                const delay = Math.floor(Math.random() * (1000 - 250 + 1)) + 250;
-                console.log(`Ждем ${delay}мс перед следующим нажатием...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
+// Функция ожидания появления кнопок с числами
+function waitForNumberButtons() {
+    return new Promise((resolve) => {
+        const checkButtons = () => {
+            const allButtons = document.querySelectorAll('button');
+            if (allButtons.length > 0) {
+                resolve();
             } else {
-                console.log('Кнопка не найдена для числа:', num);
+                setTimeout(checkButtons, 500);
             }
-        }
+        };
+        checkButtons();
+    });
+}
 
+// Адаптированная функция selectNumbers
+async function selectInitialNumbers(numbersToSelect) {
+    await waitForNumberButtons();
+    
+    for (const num of numbersToSelect) {
         if (!isSearching) return false;
 
-        // Ждем перед нажатием "Показать билеты"
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const buttons = Array.from(document.querySelectorAll('button'));
+        const button = buttons.find(btn => {
+            const text = btn.textContent.trim();
+            return text === num.toString();
+        });
         
-        const showTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
-            btn.textContent.trim() === 'Показать билеты'
-        );
-        
-        if (showTicketsButton) {
-            console.log('Нажимаем кнопку "Показать билеты"');
-            showTicketsButton.click();
-            // Ждем загрузки билетов
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            return true;
+        if (button) {
+            console.log('Нажимаем на число:', num);
+            button.click();
+            const delay = Math.floor(Math.random() * (700 - 200 + 1)) + 200;
+            await new Promise(resolve => setTimeout(resolve, delay));
         } else {
-            console.log('Кнопка "Показать билеты" не найдена');
-            return false;
+            console.log('Кнопка не найдена для числа:', num);
         }
     }
 
-    // Функция для анализа билета
-    function analyzeTicket(ticket, numbers) {
-        const allNumbers = Array.from(ticket.querySelectorAll('[data-test-id="number"], [data-test-id="selected-number"]'));
-        
-        // Группируем числа по 9 (в каждой строке по 9 чисел)
-        const rows = [];
-        for (let i = 0; i < allNumbers.length; i += 9) {
-            rows.push(allNumbers.slice(i, i + 9));
-        }
-        
-        if (rows.length !== 6) {
-            console.log('Неверное количество строк в билете');
-            return false;
-        }
+    if (!isSearching) return false;
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const showTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
+        btn.textContent.trim() === 'Показать билеты'
+    );
+    
+    if (showTicketsButton) {
+        console.log('Нажимаем кнопку "Показать билеты"');
+        showTicketsButton.click();
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        return true;
+    } else {
+        console.log('Кнопка "Показать билеты" не найдена');
+        updateStatusBlock(initialSearchParams.numbers, initialSearchParams.excludeNumbers, currentMode, 'Кнопка "Показать билеты" не найдена', true);
+        isSearching = false;
+        return false;
+    }
+}
 
-        console.log('Анализ билета:', ticket.querySelector('[data-test-id="ticket-number"]')?.textContent);
-
-        // Получаем все числа из билета
-        const ticketNumbers = rows
-            .flat()
-            .map(num => parseInt(num.textContent.trim()))
-            .filter(num => !isNaN(num));
-
-        // Проверяем, нет ли исключаемых чисел в билете
-        if (excludeNumbers.length > 0) {
-            const hasExcluded = excludeNumbers.some(num => ticketNumbers.includes(parseInt(num)));
-            if (hasExcluded) {
-                console.log('❌ В билете найдены исключаемые числа');
-                return false;
-            }
-        }
-
-        switch (searchMode) {
-            case 'row': {
-                // Проверяем каждую строку
-                for (const row of rows) {
-                    const rowNumbers = row
-                        .map(num => parseInt(num.textContent.trim()))
-                        .filter(num => !isNaN(num));
-                        
-                    const allInRow = numbers.every(num => rowNumbers.includes(parseInt(num)));
-                    if (allInRow) {
-                        console.log('✅ Все числа найдены в одной строке!');
-                        return true;
-                    }
-                }
-                return false;
-            }
-            case 'half': {
-                // Первая половина - первые три строки
-                const firstHalf = rows.slice(0, 3)
-                    .flat()
-                    .map(num => parseInt(num.textContent.trim()))
-                    .filter(num => !isNaN(num));
-
-                // Вторая половина - последние три строки
-                const secondHalf = rows.slice(3)
-                    .flat()
-                    .map(num => parseInt(num.textContent.trim()))
-                    .filter(num => !isNaN(num));
-
-                console.log('Числа в первой половине:', firstHalf);
-                console.log('Числа во второй половине:', secondHalf);
-
-                // Проверяем, все ли указанные числа находятся в первой половине
-                const allInFirstHalf = numbers.every(num => firstHalf.includes(parseInt(num)));
-                // Проверяем, все ли указанные числа находятся во второй половине
-                const allInSecondHalf = numbers.every(num => secondHalf.includes(parseInt(num)));
-
-                if (allInFirstHalf) console.log('✅ Все числа найдены в первой половине!');
-                if (allInSecondHalf) console.log('✅ Все числа найдены во второй половине!');
-
-                return allInFirstHalf || allInSecondHalf;
-            }
-            case 'anywhere': {
-                const allFound = numbers.every(num => ticketNumbers.includes(parseInt(num)));
-                if (allFound) console.log('✅ Все числа найдены в билете!');
-                return allFound;
-            }
-            default:
-                console.error('Неизвестный режим поиска:', searchMode);
-                return false;
-        }
-    }    // Функция для поиска подходящего билета
-    async function findSuitableTicket(numbers) {
-        while (isSearching) {
-            // Ищем все билеты
-            const tickets = document.querySelectorAll('button[class*="Ticket_btn"]');
-            console.log(`\nАнализируем ${tickets.length} билетов...`);
-              let foundTicketsOnPage = [];
-            
-            // Сначала проверяем все билеты на странице
-            for (const ticket of tickets) {
-                if (!isSearching) return false;
-                ticketsChecked++;
-                updateStatusBlock(numbers, excludeNumbers, mode);
-                
-                if (analyzeTicket(ticket, numbers)) {
-                    const ticketNumber = ticket.querySelector('[data-test-id="ticket-number"]')?.textContent || 'неизвестен';
-                    console.log('🎯 Найден подходящий билет:', ticketNumber);
-                    foundTicketsOnPage.push(ticket);
-                }
-            }
-
-            // Если нашли подходящие билеты, нажимаем на них
-            if (foundTicketsOnPage.length > 0) {
-                console.log(`Найдено ${foundTicketsOnPage.length} подходящих билетов на странице`);
-                
-                // Нажимаем на каждый найденный билет
-                for (const ticket of foundTicketsOnPage) {
-                    if (!isSearching) return false;
-                    
-                    const ticketNumber = ticket.querySelector('[data-test-id="ticket-number"]')?.textContent || 'неизвестен';
-                    console.log('Выбираем билет:', ticketNumber);
-                    ticket.click();
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-
-                // Обновляем статус после выбора всех билетов
-                let statusEl = document.getElementById('rusloto-status');
-                if (statusEl) {
-                    const timeSpent = formatSearchTime();
-                    statusEl.textContent = foundTicketsOnPage.length === 1
-                        ? `Поиск завершён! Найден подходящий билет. Проверено билетов: ${ticketsChecked}, время: ${timeSpent}`
-                        : `Поиск завершён! Найдено билетов: ${foundTicketsOnPage.length}. Проверено: ${ticketsChecked}, время: ${timeSpent}`;
-                    statusEl.style.background = '#28a745';
-                }
-
-                console.log('✅ Поиск успешно завершен');
-                return true;
-            }
-            
-            if (!isSearching) return false;
-            
-            console.log('❌ Подходящий билет не найден на этой странице');
-            
-            const otherTicketsButton = Array.from(document.querySelectorAll('button')).find(
-                btn => btn.textContent.trim() === 'Другие билеты'
-            );
-            
-            if (otherTicketsButton) {
-                console.log('Пробуем другие билеты...');
-                otherTicketsButton.click();
-                await new Promise(resolve => setTimeout(resolve, 1500));
-            } else {
-                console.log('Кнопка "Другие билеты" не найдена');
-                break;
-            }
-        }
-        removeStatusBlock();
+// Модифицированная функция для анализа билета
+function analyzeTicket(ticket, numbersToFind, excludeNumbersList, searchModeToUse) {
+    const allNumbers = Array.from(ticket.querySelectorAll('[data-test-id="number"], [data-test-id="selected-number"]'));
+    const rows = [];
+    for (let i = 0; i < allNumbers.length; i += 9) {
+        rows.push(allNumbers.slice(i, i + 9));
+    }
+    
+    if (rows.length !== 6) {
+        console.log('Неверное количество строк в билете');
         return false;
     }
 
-    // Запускаем процесс
-    const numbersSelected = await selectNumbers();
-    if (numbersSelected && isSearching) {
-        await findSuitableTicket(numbers);
+    const ticketNumbers = rows.flat().map(numEl => parseInt(numEl.textContent.trim())).filter(num => !isNaN(num));
+
+    if (excludeNumbersList && excludeNumbersList.length > 0) {
+        const hasExcluded = excludeNumbersList.some(num => ticketNumbers.includes(parseInt(num)));
+        if (hasExcluded) {
+            return false;
+        }
+    }
+
+    switch (searchModeToUse) {
+        case 'row': {
+            for (const row of rows) {
+                const rowNumbers = row.map(numEl => parseInt(numEl.textContent.trim())).filter(num => !isNaN(num));
+                if (numbersToFind.every(num => rowNumbers.includes(parseInt(num)))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        case 'half': {
+            const firstHalf = rows.slice(0, 3).flat().map(numEl => parseInt(numEl.textContent.trim())).filter(num => !isNaN(num));
+            const secondHalf = rows.slice(3).flat().map(numEl => parseInt(numEl.textContent.trim())).filter(num => !isNaN(num));
+            if (numbersToFind.every(num => firstHalf.includes(parseInt(num)))) return true;
+            if (numbersToFind.every(num => secondHalf.includes(parseInt(num)))) return true;
+            return false;
+        }
+        case 'anywhere': {
+            return numbersToFind.every(num => ticketNumbers.includes(parseInt(num)));
+        }
+        default:
+            console.error('Неизвестный режим поиска:', searchModeToUse);
+            return false;
+    }
+}
+
+// Основная функция для запуска поиска или покупки
+async function startActionHandler(params) {
+    console.log('Запуск действия с параметрами:', params);
+    isSearching = true;
+    searchStartTime = Date.now();
+    ticketsChecked = 0;
+
+    isPurchaseModeActive = params.isPurchaseMode;
+    ticketsToBuyTotal = params.ticketsToBuyTotal || 0;
+    if (!params.resuming) {
+         ticketsSuccessfullyPurchased = 0;
+    } else {
+        ticketsSuccessfullyPurchased = params.ticketsBoughtCount || 0;
+    }
+
+    currentMode = params.mode;
+    initialSearchParams = { 
+        numbers: params.numbers,
+        excludeNumbers: params.excludeNumbers,
+        mode: params.mode,
+        isPurchaseMode: params.isPurchaseMode,
+        ticketsToBuyTotal: params.ticketsToBuyTotal,
+        ticketsBoughtCount: ticketsSuccessfullyPurchased, 
+        selectionDone: params.selectionDone || false, 
+        resumingAfterPurchase: params.resumingAfterPurchase || false 
+    };
+    
+    updateStatusBlock(initialSearchParams.numbers, initialSearchParams.excludeNumbers, currentMode);
+    await processTicketsCycle();
+}
+
+async function processTicketsCycle() {
+    const { numbers, excludeNumbers, mode } = initialSearchParams;
+    
+    if (!initialSearchParams.selectionDone && !initialSearchParams.resumingAfterPurchase) {
+        const selectionSuccessful = await selectInitialNumbers(numbers);
+        if (!selectionSuccessful) {
+            isSearching = false; 
+            return;
+        }
+        initialSearchParams.selectionDone = true; 
+        if (isPurchaseModeActive) {
+            await chrome.storage.local.set({ resumePurchaseState: { ...initialSearchParams, ticketsBoughtCount: ticketsSuccessfullyPurchased, selectionDone: true } });
+        }
+    }
+    
+    if (initialSearchParams.resumingAfterPurchase) {
+        initialSearchParams.resumingAfterPurchase = false;
+        const updatedParams = { ...initialSearchParams, resumingAfterPurchase: false };
+        initialSearchParams = updatedParams;
+        if (isPurchaseModeActive) {
+            await chrome.storage.local.set({ resumePurchaseState: updatedParams });
+        }
+    }
+
+    while (isSearching) {
+        if (isPurchaseModeActive && ticketsSuccessfullyPurchased >= ticketsToBuyTotal) {
+            console.log(`🎉 Требуемое количество билетов (${ticketsToBuyTotal}) куплено!`);
+            updateStatusBlock(numbers, excludeNumbers, mode, `Все ${ticketsToBuyTotal} билета(ов) куплены!`);
+            isSearching = false;
+            await chrome.storage.local.remove('resumePurchaseState');
+            break;
+        }
+
+        const ticketsOnPage = document.querySelectorAll('button[class*="Ticket_btn"]');
+        console.log(`На странице найдено ${ticketsOnPage.length} билетов для анализа.`);
+        let foundSuitableTicketsThisPage = [];
+
+        for (const ticketElement of ticketsOnPage) {
+            if (!isSearching) break;
+            ticketsChecked++;
+            updateStatusBlock(numbers, excludeNumbers, mode); 
+            if (analyzeTicket(ticketElement, numbers, excludeNumbers, mode)) {
+                foundSuitableTicketsThisPage.push(ticketElement);
+            }
+        }
+
+        if (!isSearching) break;
+
+        if (foundSuitableTicketsThisPage.length > 0) {
+            console.log(`🎯 Найдено ${foundSuitableTicketsThisPage.length} подходящих билетов.`);
+            if (!isPurchaseModeActive) {
+                for (const ticket of foundSuitableTicketsThisPage) {
+                    ticket.click(); 
+                    await new Promise(resolve => setTimeout(resolve, 200)); 
+                }
+                updateStatusBlock(numbers, excludeNumbers, mode, `Найдены подходящие билеты: ${foundSuitableTicketsThisPage.length} шт.`);
+                isSearching = false; 
+                break; 
+            } else {
+                // РЕЖИМ ПОКУПКИ
+                const ticketsToSelectCount = Math.min(foundSuitableTicketsThisPage.length, ticketsToBuyTotal - ticketsSuccessfullyPurchased);
+                console.log(`Режим покупки: нужно ${ticketsToBuyTotal - ticketsSuccessfullyPurchased} еще. Доступно: ${ticketsToSelectCount}`);
+
+                if (ticketsToSelectCount > 0) {
+                    for (let i = 0; i < ticketsToSelectCount; i++) {
+                        if (!isSearching) break;
+                        foundSuitableTicketsThisPage[i].click(); 
+                        console.log('Выбран билет:', foundSuitableTicketsThisPage[i].querySelector('[data-test-id="ticket-number"]')?.textContent || 'неизвестен');
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    }
+                    if (!isSearching) break;
+
+                    const payByWalletButton = Array.from(document.querySelectorAll('button')).find(
+                        btn => btn.textContent.trim().includes('Оплатить кошельком')
+                    );
+
+                    if (payByWalletButton) {
+                        console.log('Кнопка "Оплатить кошельком" найдена. Нажимаем...');
+                        payByWalletButton.click();
+                        ticketsSuccessfullyPurchased += ticketsToSelectCount;
+                        initialSearchParams.ticketsBoughtCount = ticketsSuccessfullyPurchased;
+                        updateStatusBlock(numbers, excludeNumbers, mode, `${ticketsToSelectCount} отправлен(ы) на оплату. Куплено: ${ticketsSuccessfullyPurchased}/${ticketsToBuyTotal}`);
+                        
+                        if (ticketsSuccessfullyPurchased >= ticketsToBuyTotal) {
+                            updateStatusBlock(numbers, excludeNumbers, mode, `Все ${ticketsToBuyTotal} билета(ов) куплены!`);
+                            isSearching = false;
+                            await chrome.storage.local.remove('resumePurchaseState');
+                            break; 
+                        } else {
+                            console.log(`Куплено ${ticketsSuccessfullyPurchased}/${ticketsToBuyTotal}. Перезагрузка через 10 сек.`);
+                            await chrome.storage.local.set({ 
+                                resumePurchaseState: { 
+                                    ...initialSearchParams, 
+                                    ticketsBoughtCount: ticketsSuccessfullyPurchased,
+                                    selectionDone: false, 
+                                    resumingAfterPurchase: true 
+                                } 
+                            });
+                            await new Promise(resolve => setTimeout(resolve, 10000));
+                            window.location.reload();
+                            return; 
+                        }
+                    } else {
+                        updateStatusBlock(numbers, excludeNumbers, mode, 'Где бабки то?', true);
+                        isSearching = false;
+                        await chrome.storage.local.remove('resumePurchaseState');
+                        break;
+                    }
+                } else {
+                    console.log('Нет доступных для покупки билетов на этой странице.');
+                }
+            }
+        } else {
+            console.log('Подходящих билетов на этой странице не найдено.');
+        }
+
+        if (!isSearching) break;
+        if (isPurchaseModeActive && ticketsSuccessfullyPurchased >= ticketsToBuyTotal) {
+             updateStatusBlock(numbers, excludeNumbers, mode, `Все ${ticketsToBuyTotal} билета(ов) куплены!`);
+             isSearching = false;
+             await chrome.storage.local.remove('resumePurchaseState');
+             break;
+        }
+
+        if (isSearching) {
+            const otherTicketsButton = Array.from(document.querySelectorAll('button')).find(
+                btn => btn.textContent.trim() === 'Другие билеты'
+            );
+            if (otherTicketsButton) {
+                otherTicketsButton.click();
+                await new Promise(resolve => setTimeout(resolve, 2000)); 
+                initialSearchParams.selectionDone = false; 
+                if (isPurchaseModeActive) {
+                     await chrome.storage.local.set({ resumePurchaseState: { ...initialSearchParams, ticketsBoughtCount: ticketsSuccessfullyPurchased, selectionDone: false, resumingAfterPurchase: false } });
+                }
+            } else {
+                if (!isPurchaseModeActive || (isPurchaseModeActive && ticketsSuccessfullyPurchased < ticketsToBuyTotal)) {
+                     updateStatusBlock(numbers, excludeNumbers, mode, 'Билеты не найдены, "Другие билеты" отсутствует.');
+                }
+                isSearching = false;
+                break;
+            }
+        }
+    }
+    if (!isSearching && !(isPurchaseModeActive && ticketsSuccessfullyPurchased < ticketsToBuyTotal && initialSearchParams.resumingAfterPurchase)) {
+        await chrome.storage.local.remove('resumePurchaseState');
     }
 }
 
 // Слушаем сообщения от popup.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('Получено сообщение:', request);
-    if (request.action === 'clickNumbers') {
-        // Сначала очищаем предыдущий выбор
+    console.log('Получено сообщение от popup:', request);
+    if (request.action === 'startAction') {
         clearSelection().then(() => {
-            clickNumbers(request.numbers, request.mode, request.excludeNumbers || []);
-            sendResponse({status: 'success'});
+            startActionHandler(request); // Вызываем новый обработчик
+            sendResponse({status: 'Action started'});
         });
-        return true;    } else if (request.action === 'stopSearch') {
-        console.log('Останавливаем поиск и обновляем страницу...');
+        return true; // Важно для асинхронного sendResponse
+    } else if (request.action === 'stopSearch') {
+        console.log('Останавливаем поиск/покупку...');
         isSearching = false;
         searchStartTime = null;
         removeStatusBlock();
-        // Сначала очищаем выбранные числа
+        chrome.storage.local.remove('resumePurchaseState');
         clearSelection().then(() => {
             sendResponse({status: 'stopped'});
-            setTimeout(() => window.location.reload(), 100);
+            setTimeout(() => window.location.reload(), 100); // Возвращаем перезагрузку страницы
         });
-        return true;
+        return true; // Важно для асинхронного sendResponse
     }
 });
+
+// Логика возобновления покупки после перезагрузки страницы
+async function tryResumePurchase() {
+    const data = await chrome.storage.local.get('resumePurchaseState');
+    if (data.resumePurchaseState && data.resumePurchaseState.isPurchaseMode) { 
+        console.log('Возобновление покупки:', data.resumePurchaseState);
+        const state = data.resumePurchaseState;
+        
+        isPurchaseModeActive = true; 
+        ticketsToBuyTotal = state.ticketsToBuyTotal;
+        ticketsSuccessfullyPurchased = state.ticketsBoughtCount; 
+        currentMode = state.mode;
+
+        const actionParams = { 
+            numbers: state.numbers,
+            excludeNumbers: state.excludeNumbers,
+            mode: state.mode,
+            isPurchaseMode: true, 
+            ticketsToBuyTotal: state.ticketsToBuyTotal,
+            ticketsBoughtCount: state.ticketsBoughtCount, 
+            selectionDone: state.selectionDone, 
+            resumingAfterPurchase: state.resumingAfterPurchase, 
+            resuming: true 
+        };
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                startActionHandler(actionParams);
+            });
+        } else {
+            startActionHandler(actionParams);
+        }
+    }
+}
+
+// Вызываем попытку возобновления при загрузке скрипта
+tryResumePurchase();
