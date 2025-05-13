@@ -251,7 +251,7 @@ async function startActionHandler(params) {
 async function processTicketsCycle() {
     const { numbers, excludeNumbers, mode } = initialSearchParams;
     
-    if (!initialSearchParams.selectionDone && !initialSearchParams.resumingAfterPurchase) {
+    if (!initialSearchParams.selectionDone) { // Новое, более простое и корректное условие
         const selectionSuccessful = await selectInitialNumbers(numbers);
         if (!selectionSuccessful) {
             isSearching = false; 
@@ -259,6 +259,7 @@ async function processTicketsCycle() {
         }
         initialSearchParams.selectionDone = true; 
         if (isPurchaseModeActive) {
+            // Обновляем состояние в хранилище, так как selectionDone изменился
             await chrome.storage.local.set({ resumePurchaseState: { ...initialSearchParams, ticketsBoughtCount: ticketsSuccessfullyPurchased, selectionDone: true } });
         }
     }
