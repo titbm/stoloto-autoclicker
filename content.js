@@ -238,31 +238,53 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
                 console.error('Неизвестный режим поиска:', searchMode);
                 return false;
         }
-    }
-
-    // Функция для поиска подходящего билета
+    }    // Функция для поиска подходящего билета
     async function findSuitableTicket(numbers) {
         while (isSearching) {
             // Ищем все билеты
             const tickets = document.querySelectorAll('button[class*="Ticket_btn"]');
             console.log(`\nАнализируем ${tickets.length} билетов...`);
-              // Проверяем каждый билет
+              let foundTicketsOnPage = [];
+            
+            // Сначала проверяем все билеты на странице
             for (const ticket of tickets) {
                 if (!isSearching) return false;
                 ticketsChecked++;
                 updateStatusBlock(numbers, excludeNumbers, mode);
+                
                 if (analyzeTicket(ticket, numbers)) {
-                    const ticketNumber = ticket.querySelector('[data-test-id="ticket-number"]')?.textContent || 'неизвестен';                    console.log('🎯 Найден подходящий билет!');
-                    console.log('Нажимаем на кнопку выбора билета');
-                    let statusEl = document.getElementById('rusloto-status');
-                    if (statusEl) {
-                        const timeSpent = formatSearchTime();
-                        statusEl.textContent = `Подходящий билет найден! Это ${ticketNumber}. Проверено билетов: ${ticketsChecked}, затрачено времени: ${timeSpent}`;
-                        statusEl.style.background = '#28a745'; // Меняем цвет на зеленый для успешного результата
-                    }
-                    ticket.click();
-                    return true;
+                    const ticketNumber = ticket.querySelector('[data-test-id="ticket-number"]')?.textContent || 'неизвестен';
+                    console.log('🎯 Найден подходящий билет:', ticketNumber);
+                    foundTicketsOnPage.push(ticket);
                 }
+            }
+
+            // Если нашли подходящие билеты, нажимаем на них
+            if (foundTicketsOnPage.length > 0) {
+                console.log(`Найдено ${foundTicketsOnPage.length} подходящих билетов на странице`);
+                
+                // Нажимаем на каждый найденный билет
+                for (const ticket of foundTicketsOnPage) {
+                    if (!isSearching) return false;
+                    
+                    const ticketNumber = ticket.querySelector('[data-test-id="ticket-number"]')?.textContent || 'неизвестен';
+                    console.log('Выбираем билет:', ticketNumber);
+                    ticket.click();
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+
+                // Обновляем статус после выбора всех билетов
+                let statusEl = document.getElementById('rusloto-status');
+                if (statusEl) {
+                    const timeSpent = formatSearchTime();
+                    statusEl.textContent = foundTicketsOnPage.length === 1
+                        ? `Поиск завершён! Найден подходящий билет. Проверено билетов: ${ticketsChecked}, время: ${timeSpent}`
+                        : `Поиск завершён! Найдено билетов: ${foundTicketsOnPage.length}. Проверено: ${ticketsChecked}, время: ${timeSpent}`;
+                    statusEl.style.background = '#28a745';
+                }
+
+                console.log('✅ Поиск успешно завершен');
+                return true;
             }
             
             if (!isSearching) return false;
