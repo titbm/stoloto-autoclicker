@@ -128,6 +128,7 @@ function waitForNumberButtons() {
 
 // Адаптированная функция selectNumbers
 async function selectInitialNumbers(numbersToSelect) {
+    console.log('selectInitialNumbers вызвана с числами:', numbersToSelect); // Отладка
     await waitForNumberButtons();
     
     for (const num of numbersToSelect) {
@@ -150,6 +151,7 @@ async function selectInitialNumbers(numbersToSelect) {
     }
 
     if (!isSearching) return false;
+    console.log('Числа выбраны, ожидание перед поиском кнопки "Показать билеты"'); // Отладка
     await new Promise(resolve => setTimeout(resolve, 500));
     
     const showTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
@@ -226,7 +228,7 @@ async function startActionHandler(params) {
 
     isPurchaseModeActive = params.isPurchaseMode;
     ticketsToBuyTotal = params.ticketsToBuyTotal || 0;
-    if (!params.resuming) {
+    if (!params.resuming) { 
          ticketsSuccessfullyPurchased = 0;
     } else {
         ticketsSuccessfullyPurchased = params.ticketsBoughtCount || 0;
@@ -241,7 +243,6 @@ async function startActionHandler(params) {
         ticketsToBuyTotal: params.ticketsToBuyTotal,
         ticketsBoughtCount: ticketsSuccessfullyPurchased, 
         selectionDone: params.selectionDone || false, 
-        resumingAfterPurchase: params.resumingAfterPurchase || false 
     };
     
     updateStatusBlock(initialSearchParams.numbers, initialSearchParams.excludeNumbers, currentMode);
@@ -251,7 +252,8 @@ async function startActionHandler(params) {
 async function processTicketsCycle() {
     const { numbers, excludeNumbers, mode } = initialSearchParams;
     
-    if (!initialSearchParams.selectionDone) { // Новое, более простое и корректное условие
+    if (!initialSearchParams.selectionDone) {
+        console.log('Этап выбора чисел (selectionDone=false). Вызов selectInitialNumbers.');
         const selectionSuccessful = await selectInitialNumbers(numbers);
         if (!selectionSuccessful) {
             isSearching = false; 
@@ -259,17 +261,18 @@ async function processTicketsCycle() {
         }
         initialSearchParams.selectionDone = true; 
         if (isPurchaseModeActive) {
-            // Обновляем состояние в хранилище, так как selectionDone изменился
             await chrome.storage.local.set({ resumePurchaseState: { ...initialSearchParams, ticketsBoughtCount: ticketsSuccessfullyPurchased, selectionDone: true } });
         }
     }
     
-    if (initialSearchParams.resumingAfterPurchase) {
-        initialSearchParams.resumingAfterPurchase = false;
-        const updatedParams = { ...initialSearchParams, resumingAfterPurchase: false };
-        initialSearchParams = updatedParams;
-        if (isPurchaseModeActive) {
-            await chrome.storage.local.set({ resumePurchaseState: updatedParams });
+    if (initialSearchParams.hasOwnProperty('resumingAfterPurchase')) {
+        delete initialSearchParams.resumingAfterPurchase; 
+        if (isPurchaseModeActive) { 
+            let currentResumeState = await chrome.storage.local.get('resumePurchaseState');
+            if (currentResumeState.resumePurchaseState) {
+                delete currentResumeState.resumePurchaseState.resumingAfterPurchase;
+                await chrome.storage.local.set({ resumePurchaseState: currentResumeState.resumePurchaseState });
+            }
         }
     }
 
@@ -342,9 +345,8 @@ async function processTicketsCycle() {
                             await chrome.storage.local.set({ 
                                 resumePurchaseState: { 
                                     ...initialSearchParams, 
-                                    ticketsBoughtCount: ticketsSuccessfullyPurchased,
+                                    ticketsBoughtCount: ticketsSuccessfullyPurchased, 
                                     selectionDone: false, 
-                                    resumingAfterPurchase: true 
                                 } 
                             });
                             await new Promise(resolve => setTimeout(resolve, 10000));
@@ -382,7 +384,7 @@ async function processTicketsCycle() {
                 await new Promise(resolve => setTimeout(resolve, 2000)); 
                 initialSearchParams.selectionDone = false; 
                 if (isPurchaseModeActive) {
-                     await chrome.storage.local.set({ resumePurchaseState: { ...initialSearchParams, ticketsBoughtCount: ticketsSuccessfullyPurchased, selectionDone: false, resumingAfterPurchase: false } });
+                     await chrome.storage.local.set({ resumePurchaseState: { ...initialSearchParams, ticketsBoughtCount: ticketsSuccessfullyPurchased, selectionDone: false } });
                 }
             } else {
                 if (!isPurchaseModeActive || (isPurchaseModeActive && ticketsSuccessfullyPurchased < ticketsToBuyTotal)) {
@@ -441,7 +443,6 @@ async function tryResumePurchase() {
             ticketsToBuyTotal: state.ticketsToBuyTotal,
             ticketsBoughtCount: state.ticketsBoughtCount, 
             selectionDone: state.selectionDone, 
-            resumingAfterPurchase: state.resumingAfterPurchase, 
             resuming: true 
         };
 
