@@ -376,6 +376,27 @@ function hideInsufficientFundsWarning() {
     }
 }
 
+// Функция для проверки дублирующихся чисел между полями поиска и исключений
+function checkForDuplicateNumbers(numbers, excludeNumbers) {
+    // Находим дубликаты
+    const duplicates = numbers.filter(num => excludeNumbers.includes(num));
+    return duplicates;
+}
+
+// Функция для визуального выделения поля ввода исключений
+function highlightExcludeInput() {
+    // Сохраняем оригинальный стиль
+    const originalBorder = excludeNumbersInput.style.border;
+    
+    // Подсвечиваем красным
+    excludeNumbersInput.style.border = '2px solid #f44336';
+    
+    // Восстанавливаем через 1 секунду
+    setTimeout(() => {
+        excludeNumbersInput.style.border = originalBorder;
+    }, 1000);
+}
+
 // Обработчик кнопки запуска
 button.addEventListener('click', async () => {
     if (!isSearching) {
@@ -416,10 +437,22 @@ button.addEventListener('click', async () => {
                     hideInsufficientFundsWarning();
                 }
             }
-            
-            // Начинаем поиск
+              // Начинаем поиск
             const numbers = parseNumbers(numbersInput.value);
             const excludeNumbers = parseNumbers(excludeNumbersInput.value);
+            
+            // Проверка на дублирование чисел между полями поиска и исключений
+            const duplicates = checkForDuplicateNumbers(numbers, excludeNumbers);
+            if (duplicates.length > 0) {
+                // Выделяем поле ввода исключений
+                highlightExcludeInput();
+                
+                // Показываем предупреждение
+                alert(`Найдены дублирующиеся числа в полях поиска и исключений: ${duplicates.join(', ')}. Пожалуйста, исправьте.`);
+                button.disabled = false;
+                return;
+            }
+            
             const isPurchaseMode = testPurchaseModeCheckbox.checked && isUserAuthenticated;
             const ticketsToBuy = isPurchaseMode ? parseInt(ticketsToBuyInput.value) || 1 : 0;
             
