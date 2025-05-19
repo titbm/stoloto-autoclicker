@@ -44,7 +44,11 @@ function updateStatusBlock(numbers, excludeNumbers, mode) {
     const excludeText = excludeNumbers.length > 0 
         ? ` за исключением ${excludeNumbers.join(', ')}` 
         : '';
-    const ticketsText = ticketsChecked > 0 ? `Проверено билетов: ${ticketsChecked}` : '';
+    
+    // Текст о проверенных билетах с учетом уникальных
+    const uniqueTicketsCount = isPurchaseMode ? purchaseUniqueTicketNumbers.size : uniqueTicketNumbers.size;
+    const ticketsText = ticketsChecked > 0 ? `Проверено билетов: ${ticketsChecked} (уникальных: ${uniqueTicketsCount})` : '';
+    
     const timeText = searchStartTime ? `Время поиска: ${formatSearchTime()}` : '';
     
     let statusText = `Ищем числа ${numbersText}${excludeText} ${modeText}`;
@@ -83,6 +87,7 @@ let isSearching = false;
 let searchMode = 'half'; // Режим поиска по умолчанию
 let ticketsChecked = 0; // Счетчик просмотренных билетов
 let searchStartTime = null; // Время начала поиска
+let uniqueTicketNumbers = new Set(); // Множество для хранения уникальных номеров билетов
 
 // Переменные для режима автоматической покупки
 let isPurchaseMode = false; // Флаг режима покупки
@@ -93,6 +98,7 @@ let purchaseExcludeNumbers = []; // Исключаемые числа в реж�
 let purchaseSearchMode = 'half'; // Режим поиска в режиме покупки
 let purchaseTicketsChecked = 0; // Счетчик просмотренных билетов в режиме покупки
 let purchaseStartTime = null; // Время начала поиска в режиме покупки
+let purchaseUniqueTicketNumbers = new Set(); // Множество для хранения уникальных номеров билетов в режиме покупки
 
 // Сохранение состояния покупки
 async function savePurchaseState() {
@@ -106,6 +112,7 @@ async function savePurchaseState() {
             purchaseSearchMode,
             purchaseTicketsChecked,
             purchaseStartTime,
+            purchaseUniqueTicketNumbers: Array.from(purchaseUniqueTicketNumbers),
             timestamp: Date.now()
         }
     });
@@ -114,6 +121,7 @@ async function savePurchaseState() {
         totalTicketsToBuy,
         purchaseSearchNumbers,
         purchaseTicketsChecked,
+        uniqueTickets: purchaseUniqueTicketNumbers.size,
         purchaseStartTime: purchaseStartTime ? new Date(purchaseStartTime).toLocaleTimeString() : null
     });
 }
@@ -132,11 +140,15 @@ async function loadPurchaseState() {
             purchaseTicketsChecked = data.purchaseState.purchaseTicketsChecked || 0;
             purchaseStartTime = data.purchaseState.purchaseStartTime || null;
             
+            // Загрузка уникальных номеров билетов
+            purchaseUniqueTicketNumbers = new Set(data.purchaseState.purchaseUniqueTicketNumbers || []);
+            
             console.log('Загружено состояние покупки:', {
                 isPurchaseMode,
                 totalTicketsToBuy,
                 ticketsPurchased,
                 purchaseTicketsChecked,
+                uniqueTickets: purchaseUniqueTicketNumbers.size,
                 purchaseStartTime: purchaseStartTime ? new Date(purchaseStartTime).toLocaleTimeString() : null
             });
             
@@ -155,6 +167,9 @@ async function loadPurchaseState() {
                 // Восстанавливаем счетчик просмотренных билетов и время поиска
                 ticketsChecked = purchaseTicketsChecked;
                 searchStartTime = purchaseStartTime;
+                
+                // Восстанавливаем множество уникальных номеров билетов
+                uniqueTicketNumbers = new Set(purchaseUniqueTicketNumbers);
                 
                 // Обновляем блок статуса
                 updateStatusBlock(purchaseSearchNumbers, purchaseExcludeNumbers, purchaseSearchMode);
@@ -186,6 +201,7 @@ async function resetPurchaseState() {
     purchaseSearchMode = 'half';
     purchaseTicketsChecked = 0;
     purchaseStartTime = null;
+    purchaseUniqueTicketNumbers = new Set();
     
     await chrome.storage.local.remove('purchaseState');
     console.log('Состояние покупки сброшено');
@@ -351,10 +367,12 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
     if (isPurchaseMode && !searchStartTime) {
         ticketsChecked = purchaseTicketsChecked || 0;
         searchStartTime = purchaseStartTime || Date.now();
+        uniqueTicketNumbers = new Set(purchaseUniqueTicketNumbers);
     } else if (!isPurchaseMode) {
         // Обычный режим поиска - сбрасываем счетчики
         ticketsChecked = 0;
         searchStartTime = Date.now();
+        uniqueTicketNumbers = new Set(); // Сбрасываем множество уникальных номеров билетов
     }
     
     updateStatusBlock(numbers, excludeNumbers, mode);
@@ -424,6 +442,16 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
     function analyzeTicket(ticket, numbers) {
         const allNumbers = Array.from(ticket.querySelectorAll('[data-test-id="number"], [data-test-id="selected-number"]'));
         
+        // Получаем номер билета и сохраняем его в множество уникальных номеров
+        const ticketNumber = ticket.querySelector('[data-test-id="ticket-number"]')?.textContent;
+        if (ticketNumber) {
+            if (isPurchaseMode) {
+                purchaseUniqueTicketNumbers.add(ticketNumber);
+            } else {
+                uniqueTicketNumbers.add(ticketNumber);
+            }
+        }
+        
         // Группируем числа по 9 (в каждой строке по 9 чисел)
         const rows = [];
         for (let i = 0; i < allNumbers.length; i += 9) {
@@ -435,7 +463,7 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
             return false;
         }
 
-        console.log('Анализ билета:', ticket.querySelector('[data-test-id="ticket-number"]')?.textContent);
+        console.log('Анализ билета:', ticketNumber);
 
         // Получаем все числа из билета
         const ticketNumbers = rows
@@ -581,10 +609,10 @@ async function findSuitableTicket(numbers) {
                     
                     // Увеличиваем счетчик купленных билетов
                     ticketsPurchased += foundTicketsOnPage.length;
-                    
-                    // Обновляем информацию о просмотренных билетах и времени поиска
+                      // Обновляем информацию о просмотренных билетах и времени поиска
                     purchaseTicketsChecked = ticketsChecked;
                     purchaseStartTime = searchStartTime;
+                    purchaseUniqueTicketNumbers = new Set(uniqueTicketNumbers);
                     
                     // Обновляем статус
                     updateStatusBlock(numbers, excludeNumbers, mode);
@@ -593,12 +621,12 @@ async function findSuitableTicket(numbers) {
                     await savePurchaseState();
                       // Проверяем, достигли ли мы лимита покупок
                     if (ticketsPurchased >= totalTicketsToBuy) {
-                        console.log('✅ Достигнут лимит покупок:', ticketsPurchased);
-                          // Обновляем текст блока состояния
+                        console.log('✅ Достигнут лимит покупок:', ticketsPurchased);                        // Обновляем текст блока состояния
                         const statusEl = document.getElementById('rusloto-status');
                         if (statusEl) {
                             const timeSpent = formatSearchTime();
-                            statusEl.textContent = `Покупка завершена!\nКуплено билетов: ${ticketsPurchased} из ${totalTicketsToBuy}\nПроверено: ${ticketsChecked}, время: ${timeSpent}`;
+                            const uniqueTicketsText = purchaseUniqueTicketNumbers.size > 0 ? `, уникальных: ${purchaseUniqueTicketNumbers.size}` : '';
+                            statusEl.textContent = `Покупка завершена!\nКуплено билетов: ${ticketsPurchased} из ${totalTicketsToBuy}\nПроверено: ${ticketsChecked}${uniqueTicketsText}, время: ${timeSpent}`;
                             statusEl.style.background = '#28a745'; // зеленый только при завершении
                         }
                         
@@ -616,14 +644,14 @@ async function findSuitableTicket(numbers) {
                     }
                 } else {
                     console.log('❌ Кнопки оплаты не найдены, продолжаем поиск');
-                }
-            } else {                // Обычный режим - обновляем статус после выбора всех билетов
+                }            } else {                // Обычный режим - обновляем статус после выбора всех билетов
                 let statusEl = document.getElementById('rusloto-status');
                 if (statusEl) {
                     const timeSpent = formatSearchTime();
+                    const uniqueTicketsText = uniqueTicketNumbers.size > 0 ? ` (уникальных: ${uniqueTicketNumbers.size})` : '';
                     statusEl.textContent = foundTicketsOnPage.length === 1
-                        ? `Поиск завершён! Найден подходящий билет.\nПроверено билетов: ${ticketsChecked}, время: ${timeSpent}`
-                        : `Поиск завершён! Найдено билетов: ${foundTicketsOnPage.length}.\nПроверено: ${ticketsChecked}, время: ${timeSpent}`;
+                        ? `Поиск завершён! Найден подходящий билет.\nПроверено билетов: ${ticketsChecked}${uniqueTicketsText}, время: ${timeSpent}`
+                        : `Поиск завершён! Найдено билетов: ${foundTicketsOnPage.length}.\nПроверено: ${ticketsChecked}${uniqueTicketsText}, время: ${timeSpent}`;
                     statusEl.style.background = '#28a745'; // зеленый цвет только при полном завершении поиска
                 }
 
@@ -641,11 +669,11 @@ async function findSuitableTicket(numbers) {
         
         if (otherTicketsButton) {
             console.log('Пробуем другие билеты...');
-            
-            // В режиме покупки обновляем и сохраняем состояние перед нажатием на кнопку
+              // В режиме покупки обновляем и сохраняем состояние перед нажатием на кнопку
             if (isPurchaseMode) {
                 purchaseTicketsChecked = ticketsChecked;
                 purchaseStartTime = searchStartTime;
+                purchaseUniqueTicketNumbers = new Set(uniqueTicketNumbers);
                 await savePurchaseState();
             }
             
@@ -657,10 +685,10 @@ async function findSuitableTicket(numbers) {
             // В режиме покупки, если еще не достигли лимита, перезагружаем страницу
             if (isPurchaseMode && ticketsPurchased < totalTicketsToBuy) {
                 console.log('Перезагружаем страницу для продолжения поиска билетов...');
-                
-                // Сохраняем состояние перед перезагрузкой
+                  // Сохраняем состояние перед перезагрузкой
                 purchaseTicketsChecked = ticketsChecked;
                 purchaseStartTime = searchStartTime;
+                purchaseUniqueTicketNumbers = new Set(uniqueTicketNumbers);
                 await savePurchaseState();
                 
                 window.location.reload();
@@ -712,13 +740,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         purchaseSearchNumbers = request.numbers;
         purchaseExcludeNumbers = request.excludeNumbers || [];
         purchaseSearchMode = request.mode;
-        
-        // Если режим покупки активен и это новый запуск, сбрасываем счетчики
+          // Если режим покупки активен и это новый запуск, сбрасываем счетчики
         if (isPurchaseMode) {
             // Если запускаем новую сессию покупки, сбрасываем счетчики
             ticketsPurchased = 0;
             purchaseTicketsChecked = 0;
             purchaseStartTime = Date.now();
+            purchaseUniqueTicketNumbers = new Set();
             savePurchaseState();
         }
         
