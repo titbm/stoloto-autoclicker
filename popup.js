@@ -376,11 +376,34 @@ function hideInsufficientFundsWarning() {
     }
 }
 
-// Функция для проверки дублирующихся чисел между полями поиска и исключений
-function checkForDuplicateNumbers(numbers, excludeNumbers) {
+// Функция для проверки и удаления дублирующихся чисел между полями поиска и исключений
+function removeDuplicateNumbers(numbers, excludeNumbers) {
     // Находим дубликаты
     const duplicates = numbers.filter(num => excludeNumbers.includes(num));
-    return duplicates;
+    
+    // Если дубликаты найдены, удаляем их из списка исключений
+    if (duplicates.length > 0) {
+        // Создаем новый массив без дублирующихся чисел
+        const filteredExcludeNumbers = excludeNumbers.filter(num => !numbers.includes(num));
+        
+        // Обновляем поле ввода исключений
+        excludeNumbersInput.value = filteredExcludeNumbers.join(', ');
+        
+        // Визуально выделяем поле ввода исключений
+        highlightExcludeInput();
+        
+        return {
+            hasDuplicates: true,
+            duplicates: duplicates,
+            filteredExcludeNumbers: filteredExcludeNumbers
+        };
+    }
+    
+    return {
+        hasDuplicates: false,
+        duplicates: [],
+        filteredExcludeNumbers: excludeNumbers
+    };
 }
 
 // Функция для визуального выделения поля ввода исключений
@@ -436,22 +459,18 @@ button.addEventListener('click', async () => {
                     // Скрываем предупреждение, если оно было
                     hideInsufficientFundsWarning();
                 }
-            }
-              // Начинаем поиск
+            }            // Начинаем поиск
             const numbers = parseNumbers(numbersInput.value);
             const excludeNumbers = parseNumbers(excludeNumbersInput.value);
             
             // Проверка на дублирование чисел между полями поиска и исключений
-            const duplicates = checkForDuplicateNumbers(numbers, excludeNumbers);
-            if (duplicates.length > 0) {
-                // Выделяем поле ввода исключений
-                highlightExcludeInput();
-                
-                // Показываем предупреждение
-                alert(`Найдены дублирующиеся числа в полях поиска и исключений: ${duplicates.join(', ')}. Пожалуйста, исправьте.`);
-                button.disabled = false;
-                return;
+            const duplicateCheck = removeDuplicateNumbers(numbers, excludeNumbers);
+            if (duplicateCheck.hasDuplicates) {
+                console.log(`Обнаружены и удалены дублирующиеся числа: ${duplicateCheck.duplicates.join(', ')}`);
             }
+            
+            // Используем отфильтрованный список исключений
+            const filteredExcludeNumbers = duplicateCheck.filteredExcludeNumbers;
             
             const isPurchaseMode = testPurchaseModeCheckbox.checked && isUserAuthenticated;
             const ticketsToBuy = isPurchaseMode ? parseInt(ticketsToBuyInput.value) || 1 : 0;
@@ -462,9 +481,8 @@ button.addEventListener('click', async () => {
                 button.disabled = false;
                 return;
             }
-            
-            // Сохраняем параметры поиска
-            await saveSearchParams(numbers, excludeNumbers, searchMode.value, isPurchaseMode, ticketsToBuy);
+              // Сохраняем параметры поиска
+            await saveSearchParams(numbers, filteredExcludeNumbers, searchMode.value, isPurchaseMode, ticketsToBuy);
             
             // Получаем активную вкладку
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -476,12 +494,11 @@ button.addEventListener('click', async () => {
             }
             
             const activeTab = tabs[0];
-            
-            // Запускаем поиск
+              // Запускаем поиск
             chrome.tabs.sendMessage(activeTab.id, {
                 action: 'clickNumbers',
                 numbers: numbers,
-                excludeNumbers: excludeNumbers,
+                excludeNumbers: filteredExcludeNumbers,
                 mode: searchMode.value,
                 isPurchaseMode: isPurchaseMode,
                 ticketsToBuy: ticketsToBuy
