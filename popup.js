@@ -112,7 +112,7 @@ function updateAuthDependentUI() {
         testPurchaseModeCheckbox.disabled = true;
         
         // Обновляем текст предупреждения
-        authWarningElement.innerHTML = '<strong>Внимание!</strong> Для тестового режима покупки необходимо авторизоваться на сайте Столото.';
+        authWarningElement.innerHTML = '<strong>Внимание!</strong> Для автоматической покупки необходимо авторизоваться на сайте Столото.';
         
         // Показываем предупреждение
         authWarningElement.style.display = 'block';
@@ -152,10 +152,9 @@ testPurchaseModeCheckbox.addEventListener('change', async function() {
         try {
             // Проверка через активную вкладку - самая надежная проверка
             const authResult = await checkActiveTabAuth();
-            
-            if (!authResult) {
+              if (!authResult) {
                 console.log('Пользователь не авторизован, но пытается включить режим покупки');
-                alert('Для использования тестового режима покупки необходимо авторизоваться на сайте Столото!');
+                alert('Для использования автоматической покупки необходимо авторизоваться на сайте Столото!');
                 
                 // Отключаем чекбокс без вызова события change
                 this.checked = false;
@@ -389,10 +388,9 @@ button.addEventListener('click', async () => {
                 // Обновляем статус авторизации непосредственно перед запуском
                 console.log('Проверка авторизации перед запуском в режиме покупки...');
                 const isAuthValid = await checkActiveTabAuth();
-                
-                // Если пользователь не авторизован но пытается использовать режим покупки
+                  // Если пользователь не авторизован но пытается использовать режим покупки
                 if (!isAuthValid) {
-                    alert('Для использования тестового режима покупки необходимо авторизоваться на сайте Столото!');
+                    alert('Для использования автоматической покупки необходимо авторизоваться на сайте Столото!');
                     
                     // Отключаем чекбокс режима покупки
                     testPurchaseModeCheckbox.checked = false;

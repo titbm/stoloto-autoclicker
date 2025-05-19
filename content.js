@@ -53,9 +53,9 @@ function updateStatusBlock(numbers, excludeNumbers, mode) {
     if (ticketsText || timeText) {
         statusText += `\n${ticketsText}${ticketsText && timeText ? '. ' : ''}${timeText}`;
     }
-      // Если активен режим покупки, добавляем информацию о нём
+    // Если активен режим покупки, добавляем информацию о нём
     if (isPurchaseMode) {
-        const purchaseText = `Тестовый режим покупки. Куплено билетов: ${ticketsPurchased} из ${totalTicketsToBuy}`;
+        const purchaseText = `Автоматическая покупка. Куплено билетов: ${ticketsPurchased} из ${totalTicketsToBuy}`;
         statusText += `\n${purchaseText}`;
         
         // Меняем цвет только когда процесс покупки завершен
@@ -84,10 +84,10 @@ let searchMode = 'half'; // Режим поиска по умолчанию
 let ticketsChecked = 0; // Счетчик просмотренных билетов
 let searchStartTime = null; // Время начала поиска
 
-// Переменные для тестового режима покупки
+// Переменные для режима автоматической покупки
 let isPurchaseMode = false; // Флаг режима покупки
 let totalTicketsToBuy = 0; // Общее количество билетов для покупки
-let ticketsPurchased = 0; // Количество "купленных" билетов
+let ticketsPurchased = 0; // Количество купленных билетов
 let purchaseSearchNumbers = []; // Числа для поиска в режиме покупки
 let purchaseExcludeNumbers = []; // Исключаемые числа в режиме покупки
 let purchaseSearchMode = 'half'; // Режим поиска в режиме покупки
@@ -221,8 +221,7 @@ function checkPaymentButtons() {
     
     // Ищем кнопки оплаты по их тексту
     const payByWalletButton = allButtons.find(btn => 
-        btn.textContent.trim().includes('Оплатить кошельком') || 
-        btn.textContent.trim().includes('Оплатить со счета')
+        btn.textContent.trim().includes('Оплатить кошельком')
     );
     
     const payByQRButton = allButtons.find(btn => 
@@ -330,8 +329,7 @@ function showAuthWarning() {
             z-index: 10000;
             text-align: center;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        `;
-        warningEl.textContent = 'Для использования тестового режима покупки необходимо авторизоваться на сайте Столото!';
+        `;        warningEl.textContent = 'Для использования режима автоматической покупки необходимо авторизоваться на сайте Столото!';
         document.body.appendChild(warningEl);
     }
     
@@ -562,9 +560,24 @@ async function findSuitableTicket(numbers) {
             // В режиме покупки проверяем наличие кнопок оплаты
             if (isPurchaseMode) {
                 const paymentStatus = checkPaymentButtons();
-                
-                if (paymentStatus.walletPaymentAvailable || paymentStatus.qrPaymentAvailable) {
+                  if (paymentStatus.walletPaymentAvailable || paymentStatus.qrPaymentAvailable) {
                     console.log('✅ Обнаружены кнопки оплаты:', paymentStatus);
+                      // Нажимаем на кнопку "Оплатить кошельком"
+                    if (paymentStatus.walletPaymentAvailable) {
+                        const allButtons = Array.from(document.querySelectorAll('button'));
+                        const payByWalletButton = allButtons.find(btn => 
+                            btn.textContent.trim().includes('Оплатить кошельком')
+                        );
+                        
+                        if (payByWalletButton) {
+                            console.log('✅ Нажимаем кнопку "Оплатить кошельком"');
+                            payByWalletButton.click();
+                            
+                            // Ждем 5 секунд для обработки оплаты
+                            await new Promise(resolve => setTimeout(resolve, 5000));
+                            console.log('✅ Оплата обработана');
+                        }
+                    }
                     
                     // Увеличиваем счетчик купленных билетов
                     ticketsPurchased += foundTicketsOnPage.length;
@@ -581,12 +594,11 @@ async function findSuitableTicket(numbers) {
                       // Проверяем, достигли ли мы лимита покупок
                     if (ticketsPurchased >= totalTicketsToBuy) {
                         console.log('✅ Достигнут лимит покупок:', ticketsPurchased);
-                        
-                        // Обновляем текст блока состояния
+                          // Обновляем текст блока состояния
                         const statusEl = document.getElementById('rusloto-status');
                         if (statusEl) {
                             const timeSpent = formatSearchTime();
-                            statusEl.textContent = `Тестовая покупка завершена!\nКуплено билетов: ${ticketsPurchased} из ${totalTicketsToBuy}\nПроверено: ${ticketsChecked}, время: ${timeSpent}`;
+                            statusEl.textContent = `Покупка завершена!\nКуплено билетов: ${ticketsPurchased} из ${totalTicketsToBuy}\nПроверено: ${ticketsChecked}, время: ${timeSpent}`;
                             statusEl.style.background = '#28a745'; // зеленый только при завершении
                         }
                         
@@ -688,15 +700,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.log('❌ Пользователь не авторизован для использования режима покупки');
             showAuthWarning();
             // Сохраняем текущий статус авторизации
-            saveAuthStatus();
-            sendResponse({
+            saveAuthStatus();            sendResponse({
                 status: 'error', 
-                message: 'Для использования тестового режима покупки необходимо авторизоваться на сайте Столото'
+                message: 'Для использования режима автоматической покупки необходимо авторизоваться на сайте Столото'
             });
             return true;
         }
-        
-        // Устанавливаем параметры тестового режима покупки
+          // Устанавливаем параметры режима автоматической покупки
         isPurchaseMode = request.isPurchaseMode || false;
         totalTicketsToBuy = request.ticketsToBuy || 0;
         purchaseSearchNumbers = request.numbers;
