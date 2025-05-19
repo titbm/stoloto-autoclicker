@@ -43,64 +43,70 @@
     }
     button.stop:hover:not(:disabled) {
       background-color: #da190b;
-    }
-    .mode-select {
-      margin-bottom: 10px;
-    }
-    .purchase-controls {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 10px;
+    }    .mode-select {
       margin-bottom: 10px;
       width: 100%;
     }
-    .purchase-controls > label {
-      display: flex; 
+    .purchase-mode-container {
+      margin-bottom: 15px;
+    }    .checkbox-container {
+      display: flex;
       align-items: center;
-      white-space: nowrap;
+      margin-bottom: 8px;
     }
-    .purchase-controls input[type="checkbox"] {
+    .checkbox-container input[type="checkbox"] {
       width: auto;
-      margin-right: 5px;
+      margin-right: 8px;
+      cursor: pointer;
     }
-    .purchase-quantity-group {
-        display: flex;
-        align-items: center;
+    .checkbox-container input[type="checkbox"]:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
-    .purchase-quantity-group label {
-        margin-right: 5px;
-        white-space: nowrap;
+    .checkbox-container input[type="checkbox"]:disabled + label {
+      color: #999;
+      cursor: not-allowed;
     }
-    .purchase-quantity-group input[type="number"] {
-      width: 60px;
+    #purchaseOptionsContainer {
+      margin-top: 5px;
+      padding-left: 5px;
+      border-left: 2px solid #4CAF50;
+    }
+    #ticketsToBuy {
+      width: 100%;
+      padding: 5px;
+      box-sizing: border-box;
     }
   </style>
 </head>
 <body>
   <h3>Столото Автокликер</h3>
   <div class="input-label">Искать числа:</div>
-  <input type="text" id="numbers" placeholder="Введите числа через запятую (1-90)">
-  <div class="input-label">Исключить числа:</div>
+  <input type="text" id="numbers" placeholder="Введите числа через запятую (1-90)">  <div class="input-label">Исключить числа:</div>
   <input type="text" id="excludeNumbers" placeholder="Числа, которых не должно быть в билете">
-
-  <select id="searchMode" class="mode-select">
-    <option value="anywhere" selected>Числа где угодно</option>
-    <option value="half">Числа в одной половине</option>
-    <option value="row">Числа в одной строке</option>
-  </select>
-  <button id="startButton">Запустить</button>
-
-  <div class="purchase-controls">
-    <label for="purchaseModeCheckbox">
-      <input type="checkbox" id="purchaseModeCheckbox">Режим покупки
-    </label>
-    <div class="purchase-quantity-group">
-        <label for="ticketsToBuyCount">Кол-во:</label>
-        <input type="number" id="ticketsToBuyCount" value="1" min="1">
+  
+  <div class="mode-container">
+    <select id="searchMode" class="mode-select">
+      <option value="anywhere" selected>Числа где угодно</option>
+      <option value="half">Числа в одной половине</option>
+      <option value="row">Числа в одной строке</option>
+    </select>
+  </div>  <div class="purchase-mode-container">
+    <div class="checkbox-container">      <input type="checkbox" id="testPurchaseMode" disabled />
+      <label for="testPurchaseMode">Автоматически купить билеты с внутреннего кошелька сайта</label>
+    </div>
+    <div id="authWarning" style="margin-top: 5px; font-size: 0.85em; color: #dc3545; display:block;">
+      <strong>Внимание!</strong> Для автоматической покупки необходимо авторизоваться на сайте Столото.
+    </div>    <div id="purchaseOptionsContainer" style="display:none; margin-top: 10px;">
+      <div class="input-label">Количество билетов:</div>
+      <input type="number" id="ticketsToBuy" min="1" max="20" value="1" placeholder="Сколько билетов купить">
+      <div id="fundsWarning" style="margin-top: 5px; font-size: 0.85em; color: #dc3545; background-color: #f8d7da; padding: 5px; border-radius: 4px; display: none;">
+        <strong>Внимание!</strong> Недостаточно средств для покупки билетов.
+      </div>
     </div>
   </div>
-
+  
+  <button id="startButton">Запустить</button>
   <script src="popup.js"></script>
 </body>
 </html>
