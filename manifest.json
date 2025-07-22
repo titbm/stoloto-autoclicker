@@ -21,7 +21,16 @@
   "content_scripts": [
     {
       "matches": ["https://www.stoloto.ru/ruslotto/game?viewType=favorite"],
-      "js": ["content.js"]
+      "js": [
+        "modules/utils.js",
+        "modules/state.js", 
+        "modules/ui.js",
+        "modules/auth.js",
+        "modules/payment.js", 
+        "modules/search.js",
+        "modules/main.js",
+        "content.js"
+      ]
     }
   ]
 }
