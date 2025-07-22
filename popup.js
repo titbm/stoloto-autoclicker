@@ -199,6 +199,31 @@ testPurchaseModeCheckbox.addEventListener('change', async function() {
     }
 });
 
+// Обработчик изменения количества билетов для покупки
+ticketsToBuyInput.addEventListener('input', async function() {
+    // Проверяем только если режим покупки активен
+    if (testPurchaseModeCheckbox.checked) {
+        const ticketsCount = parseInt(this.value);
+        
+        if (ticketsCount > 0) {
+            try {
+                const balanceInfo = await checkUserBalance(ticketsCount);
+                
+                if (!balanceInfo.hasEnoughFunds) {
+                    showInsufficientFundsWarning(balanceInfo.balance, ticketsCount);
+                } else {
+                    hideInsufficientFundsWarning();
+                }
+            } catch (error) {
+                console.error('Ошибка при проверке баланса:', error);
+                hideInsufficientFundsWarning();
+            }
+        } else {
+            hideInsufficientFundsWarning();
+        }
+    }
+});
+
 function parseNumbers(input) {
     return input.split(',')
         .map(num => num.trim())
