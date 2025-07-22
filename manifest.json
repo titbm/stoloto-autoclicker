@@ -15,7 +15,7 @@
     }
   },
   "background": {
-    "service_worker": "event_page.js",
+    "service_worker": "background.js",
     "type": "module"
   },
   "content_scripts": [
