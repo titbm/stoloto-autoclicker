@@ -13,14 +13,16 @@ function isUserLoggedIn() {
     }
     
     // Проверяем наличие ссылки на кошелек - надежный индикатор авторизации
-    const walletLink = document.querySelector('a[href="/private/wallet?int=header"]');
+    // Используем частичное совпадение для поддержки как десктопной (?int=header), так и мобильной (?int=sitemap) версий
+    const walletLink = document.querySelector('a[href*="/private/wallet"]');
     if (walletLink) {
         console.log('Обнаружена ссылка на кошелек - пользователь авторизован');
         return true;
     }
     
     // Проверяем наличие ссылки "Мои билеты" - тоже надежный индикатор
-    const myTicketsLink = document.querySelector('a[href="/private/tickets/all?int=header"]');
+    // Используем частичное совпадение для поддержки разных версий сайта
+    const myTicketsLink = document.querySelector('a[href*="/private/tickets/all"]');
     if (myTicketsLink) {
         console.log('Обнаружена ссылка "Мои билеты" - пользователь авторизован');
         return true;
@@ -42,7 +44,8 @@ function getUserBalance() {
     console.log('Начинаем поиск баланса пользователя...');
     
     // Ищем ссылку на кошелек - надежный способ получить баланс
-    const walletLink = document.querySelector('a[href="/private/wallet?int=header"]');
+    // Используем частичное совпадение для поддержки как десктопной, так и мобильной версий
+    const walletLink = document.querySelector('a[href*="/private/wallet"]');
     if (walletLink) {
         const balanceText = walletLink.textContent.trim();
         console.log('Найден текст баланса в ссылке на кошелек:', balanceText);

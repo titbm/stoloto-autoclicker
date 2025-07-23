@@ -192,6 +192,23 @@ function setupMessageListener() {
                 requiredAmount: ticketsToBuy * 150
             });
             return true;
+            
+        } else if (request.action === 'checkPageLoadState') {
+            // Проверяем состояние загрузки страницы
+            const isStolotoPage = window.location.hostname.includes('stoloto.ru');
+            const isReady = isStolotoPageReady();
+            
+            console.log('Проверка состояния загрузки страницы:', {
+                isStolotoPage,
+                isReady,
+                url: window.location.href
+            });
+            
+            sendResponse({
+                isReady: isReady,
+                isStolotoPage: isStolotoPage
+            });
+            return true;
         }
     });
 }
