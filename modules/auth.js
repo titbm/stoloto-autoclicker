@@ -21,10 +21,17 @@ function isUserLoggedIn() {
     }
     
     // Проверяем наличие ссылки "Мои билеты" - тоже надежный индикатор
-    // Используем частичное совпадение для поддержки разных версий сайта
-    const myTicketsLink = document.querySelector('a[href*="/private/tickets/all"]');
+    // Используем частичное совпадение для поддержки разных версий сайта (с параметрами и без)
+    const myTicketsLink = document.querySelector('a[href*="/private/tickets"]');
     if (myTicketsLink) {
         console.log('Обнаружена ссылка "Мои билеты" - пользователь авторизован');
+        return true;
+    }
+    
+    // Проверяем наличие ссылки на бонусы - дополнительный индикатор для мобильной версии
+    const bonusLink = document.querySelector('a[href*="/private/bonus"]');
+    if (bonusLink) {
+        console.log('Обнаружена ссылка "Бонусы" - пользователь авторизован');
         return true;
     }
     
@@ -57,6 +64,22 @@ function getUserBalance() {
             const balanceValue = parseInt(matches[1].replace(/\s/g, ''));
             console.log('Баланс пользователя:', balanceValue);
             return balanceValue;
+        }
+    }
+    
+    // Дополнительный поиск - если основной метод не сработал, ищем по тексту с рублевым символом
+    const allLinks = document.querySelectorAll('a');
+    for (const link of allLinks) {
+        const linkText = link.textContent.trim();
+        // Ищем ссылки, содержащие символ рубля и указывающие на кошелек
+        if (linkText.includes('₽') && link.href && link.href.includes('/private/wallet')) {
+            console.log('Найдена альтернативная ссылка с балансом:', linkText);
+            const matches = linkText.match(/(\d+(?:\s\d+)*)\s*₽/);
+            if (matches) {
+                const balanceValue = parseInt(matches[1].replace(/\s/g, ''));
+                console.log('Баланс пользователя (альтернативный поиск):', balanceValue);
+                return balanceValue;
+            }
         }
     }
     
