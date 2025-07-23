@@ -95,7 +95,7 @@ await chrome.storage.local.clear();
 **Сохранение и восстановление состояния поиска**:
 
 ```javascript
-// В popup.js - сохранение параметров
+// В popup.js - сохранение параметров поиска
 async function saveSearchParams(numbers, excludeNumbers, mode, isPurchaseMode, ticketsToBuy) {
     try {
         await chrome.storage.local.set({
@@ -114,24 +114,115 @@ async function saveSearchParams(numbers, excludeNumbers, mode, isPurchaseMode, t
     }
 }
 
-// В popup.js - загрузка параметров
+// В popup.js - загрузка последних параметров поиска
 async function loadLastSearchParams() {
     try {
         const data = await chrome.storage.local.get('lastSearch');
         if (data.lastSearch) {
+            // Восстанавливаем базовые настройки
             numbersInput.value = data.lastSearch.numbers.join(', ');
             excludeNumbersInput.value = data.lastSearch.excludeNumbers.join(', ');
             searchMode.value = data.lastSearch.mode;
             
-            // Проверка актуальности данных (не старше 24 часов)
-            const isRecent = (Date.now() - data.lastSearch.timestamp) < 24 * 60 * 60 * 1000;
-            if (isRecent && data.lastSearch.isPurchaseMode) {
+            // Проверяем текущий статус авторизации еще раз
+            const currentAuthStatus = await checkAuthFromStorage();
+            
+            // Восстанавливаем настройки режима покупки только если пользователь авторизован
+            if (data.lastSearch.isPurchaseMode && currentAuthStatus) {
+                console.log('Восстанавливаем настройки режима покупки, пользователь авторизован');
                 testPurchaseModeCheckbox.checked = true;
+                purchaseOptionsContainer.style.display = 'block';
                 ticketsToBuyInput.value = data.lastSearch.ticketsToBuy || 1;
+            } else if (data.lastSearch.isPurchaseMode && !currentAuthStatus) {
+                console.log('Режим покупки был активен, но пользователь не авторизован');
+                testPurchaseModeCheckbox.checked = false;
+                purchaseOptionsContainer.style.display = 'none';
             }
         }
     } catch (error) {
         console.error('Ошибка загрузки параметров:', error);
+    }
+}
+
+// В state.js - сохранение состояния покупки
+async function savePurchaseState() {
+    const state = window.stolotoState;
+    await chrome.storage.local.set({
+        purchaseState: {
+            isPurchaseMode: state.isPurchaseMode,
+            totalTicketsToBuy: state.totalTicketsToBuy,
+            ticketsPurchased: state.ticketsPurchased,
+            purchaseSearchNumbers: state.purchaseSearchNumbers,
+            purchaseExcludeNumbers: state.purchaseExcludeNumbers,
+            purchaseSearchMode: state.purchaseSearchMode,
+            purchaseTicketsChecked: state.purchaseTicketsChecked,
+            purchaseStartTime: state.purchaseStartTime,
+            timestamp: Date.now()
+        }
+    });
+    console.log('Состояние покупки сохранено:', {
+        ticketsPurchased: state.ticketsPurchased,
+        totalTicketsToBuy: state.totalTicketsToBuy,
+        purchaseSearchNumbers: state.purchaseSearchNumbers,
+        purchaseTicketsChecked: state.purchaseTicketsChecked
+    });
+}
+
+// В state.js - загрузка состояния покупки
+async function loadPurchaseState() {
+    try {
+        const data = await chrome.storage.local.get('purchaseState');
+        if (data.purchaseState) {
+            const state = window.stolotoState;
+            const savedState = data.purchaseState;
+            
+            state.isPurchaseMode = savedState.isPurchaseMode;
+            state.totalTicketsToBuy = savedState.totalTicketsToBuy;
+            state.ticketsPurchased = savedState.ticketsPurchased;
+            state.purchaseSearchNumbers = savedState.purchaseSearchNumbers;
+            state.purchaseExcludeNumbers = savedState.purchaseExcludeNumbers;
+            state.purchaseSearchMode = savedState.purchaseSearchMode;
+            state.purchaseTicketsChecked = savedState.purchaseTicketsChecked || 0;
+            state.purchaseStartTime = savedState.purchaseStartTime || null;
+            
+            // Проверяем авторизацию перед продолжением режима покупки
+            if (state.isPurchaseMode && !window.stolotoAuth.isUserLoggedIn()) {
+                console.log('❌ Пользователь вышел из аккаунта, отменяем режим покупки');
+                window.stolotoUI.showAuthWarning();
+                await resetPurchaseState();
+                return;
+            }
+            
+            // Если покупка еще не завершена, продолжаем поиск
+            if (state.isPurchaseMode && state.ticketsPurchased < state.totalTicketsToBuy) {
+                console.log('Продолжаем покупку билетов, осталось купить:', 
+                           state.totalTicketsToBuy - state.ticketsPurchased);
+                
+                // Восстанавливаем счетчик просмотренных билетов и время поиска
+                state.ticketsChecked = state.purchaseTicketsChecked;
+                state.searchStartTime = state.purchaseStartTime;
+                
+                // Обновляем блок статуса
+                window.stolotoUI.updateStatusBlock(
+                    state.purchaseSearchNumbers, 
+                    state.purchaseExcludeNumbers, 
+                    state.purchaseSearchMode
+                );
+                
+                // Запускаем поиск с задержкой для загрузки страницы
+                setTimeout(() => {
+                    window.stolotoSearch.clearSelection().then(() => {
+                        window.stolotoMain.clickNumbers(
+                            state.purchaseSearchNumbers, 
+                            state.purchaseSearchMode, 
+                            state.purchaseExcludeNumbers
+                        );
+                    });
+                }, 1500);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке состояния покупки:', error);
     }
 }
 ```
@@ -189,40 +280,94 @@ console.log('Вкладки в текущем окне:', currentWindowTabs.leng
 
 ##### chrome.tabs.sendMessage()
 
-Отправка сообщений в content script на указанной вкладке.
+Отправка сообщений в content script на указанной вкладке. Все сообщения обрабатываются через `setupMessageListener()` в main.js.
 
 ```javascript
-// Отправка команды поиска
+// Отправка команды поиска (из popup.js)
 chrome.tabs.sendMessage(activeTab.id, {
     action: 'clickNumbers',
-    numbers: [1, 5, 12, 23, 34],
-    excludeNumbers: [7, 14, 21],
-    mode: 'half',
-    isPurchaseMode: true,
-    ticketsToBuy: 3
+    numbers: numbers,
+    excludeNumbers: filteredExcludeNumbers,
+    mode: searchMode.value,
+    isPurchaseMode: isPurchaseMode,
+    ticketsToBuy: ticketsToBuy
 }, (response) => {
     if (chrome.runtime.lastError) {
-        console.error('Ошибка отправки сообщения:', chrome.runtime.lastError.message);
+        console.error('Ошибка:', chrome.runtime.lastError);
         alert('Ошибка: убедитесь, что вы находитесь на странице Столото');
+        button.disabled = false;
     } else if (response && response.status === 'error') {
-        console.error('Ошибка выполнения:', response.message);
+        console.error('Ошибка:', response.message);
         alert(response.message);
+        button.disabled = false;
     } else {
-        console.log('Команда успешно отправлена');
+        console.log('Начат поиск билета');
+        isSearching = true;
+        button.textContent = 'Остановить';
+        button.classList.remove('start');
+        button.classList.add('stop');
+        button.disabled = false;
     }
 });
 
-// Проверка авторизации пользователя
+// Проверка авторизации пользователя (из popup.js)
 chrome.tabs.sendMessage(tab.id, { action: 'checkUserLogin' }, (response) => {
     if (chrome.runtime.lastError) {
-        console.log('Не удалось проверить авторизацию:', chrome.runtime.lastError.message);
+        console.error('Ошибка при проверке авторизации:', chrome.runtime.lastError);
+        resolve(false);
         return;
     }
     
     if (response && response.isLoggedIn !== undefined) {
-        console.log('Статус авторизации:', response.isLoggedIn);
-        updateAuthStatus(response.isLoggedIn);
+        isUserAuthenticated = response.isLoggedIn;
+        console.log('Получен статус авторизации от страницы:', isUserAuthenticated);
+        
+        // Сохраняем полученный статус в хранилище
+        chrome.storage.local.set({
+            authStatus: {
+                isLoggedIn: isUserAuthenticated,
+                timestamp: Date.now()
+            }
+        });
+        
+        resolve(isUserAuthenticated);
+    } else {
+        console.log('Некорректный ответ от content script:', response);
+        resolve(false);
     }
+});
+
+// Проверка баланса пользователя (из popup.js)
+chrome.tabs.sendMessage(tab.id, { 
+    action: 'checkUserBalance', 
+    ticketsToBuy: ticketsToBuy 
+}, (response) => {
+    if (chrome.runtime.lastError) {
+        console.error('Ошибка при проверке баланса:', chrome.runtime.lastError);
+        resolve({ hasEnoughFunds: false, balance: 0 });
+        return;
+    }
+    
+    if (response && response.balance !== undefined) {
+        console.log('Получен баланс:', response.balance, 'руб.');
+        console.log('Требуется:', ticketsToBuy * TICKET_PRICE, 'руб.');
+        resolve({ 
+            hasEnoughFunds: response.hasEnoughFunds, 
+            balance: response.balance 
+        });
+    } else {
+        console.log('Некорректный ответ при проверке баланса:', response);
+        resolve({ hasEnoughFunds: false, balance: 0 });
+    }
+});
+
+// Остановка поиска (из popup.js)
+chrome.tabs.sendMessage(tab.id, { action: 'stopSearch' }, () => {
+    isSearching = false;
+    button.textContent = 'Запустить';
+    button.classList.remove('stop');
+    button.classList.add('start');
+    button.disabled = false;
 });
 ```
 
@@ -407,24 +552,25 @@ async function injectAuthChecker(tabId) {
 
 ##### chrome.action.onClicked
 
-Обработчик кликов п�� иконке расширения.
+Обработчик кликов по иконке расширения в background.js.
 
 ```javascript
 chrome.action.onClicked.addListener(async (tab) => {
+    // URL рабочей страницы приложения
     const workPageUrl = 'https://www.stoloto.ru/ruslotto/game?viewType=favorite';
     
-    console.log('Клик по иконке расширения, текущий URL:', tab.url);
-    
+    // Если текущая вкладка - рабочая страница приложения
     if (tab.url === workPageUrl) {
-        // Пользователь на рабочей странице - открываем popup
+        // Открываем popup
         await chrome.action.setPopup({ popup: 'popup.html' });
+        // Имитируем повторный клик, чтобы открыть popup
         await chrome.action.openPopup();
     } else {
-        // Перенаправляем на рабочую страницу
+        // Если текущая вкладка не рабочая, открываем новую
         await chrome.tabs.create({ url: workPageUrl });
     }
     
-    // Сбрасываем popup для следующего клика
+    // Сбрасываем popup, чтобы следующий клик снова прошёл через этот обработчик
     await chrome.action.setPopup({ popup: '' });
 });
 ```

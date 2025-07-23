@@ -2,167 +2,215 @@
 
 ## Обзор
 
-Данный документ описывает структуру DOM элементов на сайте Столото (https://www.stoloto.ru/ruslotto/game?viewType=favorite), основанную на анализе реального сайта через браузер.
+Данный документ описывает актуальную структуру DOM элементов на сайте Столото для страницы выбора любимых чисел в лотерее "Русское лото". Информация основана на анализе страницы `https://www.stoloto.ru/ruslotto/game?viewType=favorite`.
 
 ## Основная структура страницы
 
 ### Заголовок и навигация
 
 ```html
-<generic> <!-- Основной контейнер -->
-  <generic> <!-- Боковая панель с лотереями -->
-    <button class="Button_button__aXkCB Button_square__ND8Xs Button_squareMediumSize__NdTuf LotteriesSidebar_btn__6lOle">
-      <!-- Кнопка переключения боковой панели -->
-    </button>
-    <generic> <!-- Список лотерей -->
-      <link href="/ruslotto/game?int=left">Русское лото</link>
-      <link href="/gzhl/game?int=left">Жилищная лотерея</link>
-      <!-- ... другие лотереи -->
-    </generic>
+<navigation>
+  <generic>
+    <text>Меню</text>
+    <img />
   </generic>
-  
-  <generic> <!-- Основной контент -->
-    <generic> <!-- Верхняя панель -->
-      <link href="/"><!-- Логотип --></link>
-      <navigation>
-        <generic>Меню</generic>
-        <generic>
-          <link href="/check-ticket?int=header">Проверка билетов</link>
-          <button>Поддержка</button>
-        </generic>
-      </navigation>
-      <link href="/auth?targetUrl=%2Fruslotto%2Fgame%3FviewType%3Dfavorite">Вход и регистрация</link>
-    </generic>
+  <generic>
+    <link>Проверка билетов</link>
+    <button>Поддержка</button>
   </generic>
-</generic>
+</navigation>
+<link>Вход и регистрация</link>
 ```
+
+**Селекторы авторизации:**
+- Ссылка на авторизацию: `link[href*="/auth"]`
+- Текст ссылки: "Вход и регистрация"
 
 ### Информация о тираже
 
 ```html
-<generic> <!-- Блок информации о тираже -->
-  <heading level="1">Русское лото</heading>
-  <generic> <!-- Карусель тиражей -->
-    <generic> <!-- Активный тираж -->
+<generic>
+  <heading level=1>Русское лото</heading>
+  <generic>
+    <!-- Текущий тираж -->
+    <generic>
       <paragraph>Тираж № 1662</paragraph>
-      <paragraph>23.07 ср •сайт</paragraph>
-      <paragraph>Джекпот 800 000 000 ₽</paragraph>
-      <paragraph>Золотой бочонок 9 000 000 ₽</paragraph>
-      <generic>Минимальный выигрыш 200 ₽</generic>
+      <paragraph>
+        <generic>23.07 ср</generic>
+        <generic>•сайт</generic>
+      </paragraph>
+      <generic>
+        <paragraph>
+          <generic>Джекпот</generic>
+          <text>800 000 000 ₽</text>
+        </paragraph>
+        <paragraph>
+          <generic>Золотой бочонок</generic>
+          <text>9 000 000 ₽</text>
+        </paragraph>
+      </generic>
     </generic>
-    <!-- Другие тиражи -->
+    <!-- Будущие тиражи -->
+    <generic>...</generic>
   </generic>
+</generic>
+```
+
+### Навигация по разделам лотереи
+
+```html
+<generic>
+  <link href="/ruslotto/game?viewType=tickets">Билеты</link>
+  <link href="/ruslotto/archive">Архив тиражей</link>
+  <link href="/ruslotto/game?viewType=all">Все числа</link>
+  <link href="/ruslotto">О лотерее</link>
+  <link href="/ruslotto/rules">Правила игры</link>
 </generic>
 ```
 
 ## Интерфейс выбора чисел
 
-### Блок выбора любимых чисел
+### Заголовок и инструкции
 
 ```html
-<generic> <!-- Контейнер выбора чисел -->
-  <generic> <!-- Заголовок и инструкции -->
-    <img> <!-- Иконка -->
-    <generic>
-      <text>Выберите до 7 любимых чисел — подберём с ними билеты</text>
-      <img> <!-- Информационная иконка -->
-    </generic>
-    <button>Сбросить</button> <!-- Кнопка очистки выбора -->
+<generic>
+  <img />
+  <generic>
+    <text>Выберите до 7 любимых чисел — подберём с ними билеты</text>
+    <img />
   </generic>
-  
-  <generic> <!-- Сетка чисел от 1 до 90 -->
-    <button>1</button>
-    <button>2</button>
-    <!-- ... -->
-    <button active>7</button> <!-- Выбранное число -->
-    <!-- ... -->
-    <button>90</button>
-  </generic>
+  <button>Сбросить</button>
 </generic>
-
-<button>Показать билеты</button> <!-- Кнопка поиска билетов -->
 ```
 
-### Структура кнопок чисел
+**Селекторы управления:**
+- Кнопка сброса: `button` с текстом "Сбросить"
 
-- **Обычная кнопка числа**: `<button>N</button>` где N - число от 1 до 90
-- **Выбранная кнопка**: `<button active>N</button>` - имеет атрибут `active`
-- **CSS классы**: Кнопки чисел не имеют специальных data-test-id атрибутов
+### Сетка чисел (1-90)
+
+```html
+<generic>
+  <button>1</button>
+  <button>2</button>
+  <!-- ... -->
+  <button>90</button>
+</generic>
+```
+
+**Характеристики кнопок чисел:**
+- Всего кнопок: 90 (числа от 1 до 90)
+- Активная кнопка имеет атрибут `[active]`
+- Каждая кнопка содержит `<generic>` с текстом числа
+- Селектор: `button` с текстовым содержимым числа
+
+### Отображение выбранных чисел
+
+После выбора чисел появляется блок:
+
+```html
+<generic>
+  <img />
+  <generic>Выбранные числа</generic>
+  <paragraph>1, 5</paragraph>
+  <button>
+    <img />
+  </button>
+</generic>
+```
+
+### Кнопка показа билетов
+
+```html
+<button>Показать билеты</button>
+```
+
+**Селектор:** `button` с текстом "Показать билеты"
 
 ## Структура билетов
 
 ### Контейнер билетов
 
+После нажатия "Показать билеты" появляется список билетов:
+
 ```html
-<generic> <!-- Контейнер с билетами -->
-  <generic> <!-- Информация о выбранных числах -->
-    <generic>Выбранные числа</generic>
-    <paragraph>7</paragraph> <!-- Выбранные числа -->
-    <button> <!-- Кнопка изменения -->
-      <img>
-    </button>
-  </generic>
-  
-  <generic> <!-- Список билетов -->
-    <button class="Ticket_btn__L4SXA"> <!-- Билет -->
-      <generic> <!-- Заголовок билета -->
-        <generic>Билет №999294021672</generic>
-        <img> <!-- Иконка -->
-      </generic>
-      <generic> <!-- Числа билета, разделенные по строкам -->
-        <!-- Строка 1 -->
-        <generic>25</generic>
-        <generic>55</generic>
-        <generic>65</generic>
-        <generic>71</generic>
-        <generic>89</generic>
-        <!-- Строка 2 -->
-        <generic>3</generic>
-        <generic>34</generic>
-        <generic>47</generic>
-        <generic>54</generic>
-        <generic>75</generic>
-        <!-- ... остальные строки -->
-      </generic>
-    </button>
-    <!-- Другие билеты -->
-  </generic>
-  
-  <button>Другие билеты</button> <!-- Кнопка загрузки новых билетов -->
+<generic>
+  <button>Билет №999294061545 [числа билета]</button>
+  <button>Билет №999294088430 [числа билета]</button>
+  <!-- ... другие билеты ... -->
+  <button>Другие билеты</button>
 </generic>
 ```
 
-### Структура чисел в билете
+### Структура отдельного билета
 
-Каждый билет содержит 90 чисел, организованных в 6 строк по 15 чисел в каждой:
-- **Строки 1-3**: Верхняя половина билета
-- **Строки 4-6**: Нижняя половина билета
-- **Каждая строка**: 15 позиций, из которых заполнены только 9
+```html
+<button>
+  <generic>
+    <generic>Билет №999294061545</generic>
+    <img />
+  </generic>
+  <!-- Первые 3 строки (строки 1-3) -->
+  <generic>
+    <generic>19</generic>
+    <generic>22</generic>
+    <generic>48</generic>
+    <generic>50</generic>
+    <generic>83</generic>
+    <generic>4</generic>
+    <generic>35</generic>
+    <generic>53</generic>
+    <generic>69</generic>
+    <generic>70</generic>
+    <generic>5</generic>
+    <generic>14</generic>
+    <generic>27</generic>
+    <generic>79</generic>
+    <generic>89</generic>
+  </generic>
+  <!-- Последние 3 строки (строки 4-6) -->
+  <generic>
+    <generic>2</generic>
+    <generic>31</generic>
+    <generic>40</generic>
+    <generic>67</generic>
+    <generic>72</generic>
+    <generic>1</generic>
+    <generic>21</generic>
+    <generic>47</generic>
+    <generic>52</generic>
+    <generic>68</generic>
+    <generic>11</generic>
+    <generic>34</generic>
+    <generic>57</generic>
+    <generic>73</generic>
+    <generic>86</generic>
+  </generic>
+</button>
+```
 
-**Важно**: Числа в билетах представлены как `<generic>N</generic>` элементы, а НЕ как элементы с `data-test-id="number"` или `data-test-id="selected-number"`.
+**Ключевые характеристики билета:**
+- Каждый билет содержит 30 чисел (6 строк × 5 чисел в каждой строке)
+- Числа группируются в два блока по 15 чисел
+- Первый блок: строки 1-3 (числа 1-15)
+- Второй блок: строки 4-6 (числа 16-30)
+- Каждое число находится в отдельном `<generic>` элементе
 
-## Элементы навигации и управления
+**Селекторы билетов:**
+- Кнопка билета: `button` содержащий текст "Билет №"
+- Номер билета: первый `<generic>` внутри кнопки билета
+- Числа билета: все `<generic>` элементы с числовым содержимым
 
-### Кнопки управления
+### Кнопка навигации
 
-| Кнопка | Селектор | Описание |
-|--------|----------|----------|
-| Показать билеты | `button` с текстом "Показать билеты" | Запускает поиск билетов |
-| Другие билеты | `button` с текстом "Другие билеты" | Загружает новую партию билетов |
-| Сбросить | `button` с текстом "Сбросить" | Очищает выбранные числа |
+```html
+<button>Другие билеты</button>
+```
 
-### Навигационные ссылки
+**Селектор:** `button` с текстом "Другие билеты"
 
-| Элемент | Селектор | Описание |
-|---------|----------|----------|
-| Билеты | `a[href="/ruslotto/game?viewType=tickets"]` | Переход к выбору билетов |
-| Все числа | `a[href="/ruslotto/game?viewType=all"]` | Переход к режиму "все числа" |
-| Свои числа | `a[href="/ruslotto/game?viewType=favorite"]` | Текущая страница |
-| Архив тиражей | `a[href="/ruslotto/archive"]` | Архив результатов |
+## Элементы авторизации и баланса
 
-## Элементы аутентификации
-
-### Неавторизованный пользователь
+### Неавторизованное состояние
 
 ```html
 <link href="/auth?targetUrl=%2Fruslotto%2Fgame%3FviewType%3Dfavorite">
@@ -170,48 +218,81 @@
 </link>
 ```
 
-### Авторизованный пользователь
+### Авторизованное состояние
 
-Для авторизованных пользователей отображаются:
-- Ссылка на кошелек: `a[href="/private/wallet?int=header"]`
-- Ссылка на бонусы: `a[href="/private/bonus?int=header"]`
-- Ссылка на билеты: `a[href="/private/tickets/all?int=header"]`
+В авторизованном состоянии ссылка "Вход и регистрация" заменяется на элементы профиля:
 
-## Индикаторы загрузки и состояния
+```html
+<link href="/private/wallet?int=header">0 ₽</link>
+<link href="/private/bonus?int=header">46</link>
+<link href="/private/tickets/all?int=header">Мои билеты</link>
+```
 
-### Состояния страницы
+**Селекторы авторизованного пользователя:**
+- Баланс: `a[href="/private/wallet?int=header"]`
+- Бонусы: `a[href="/private/bonus?int=header"]`
+- Мои билеты: `a[href="/private/tickets/all?int=header"]`
 
-- **Загрузка билетов**: После нажатия "Показать билеты" происходит загрузка с задержкой ~1 секунда
-- **Загрузка новых билетов**: После нажатия "Другие билеты" загружается новая партия билетов
-- **Выбор чисел**: Мгновенная реакция на клик по числам
+## Различия с кодом расширения
 
-### Визуальные индикаторы
+### Устаревшие селекторы
 
-- **Выбранные числа**: Кнопки получают атрибут `active`
-- **Выбранные билеты**: Билеты могут изменять визуальное состояние при выборе
+Код расширения использует следующие селекторы, которые могут быть неактуальными:
 
-## Важные различия с кодом расширения
+1. **Числа в билете:**
+   - Код: `[data-test-id="number"], [data-test-id="selected-number"]`
+   - Реальность: `<generic>` элементы с числовым содержимым
 
-### Несоответствия в селекторах
+2. **Номер билета:**
+   - Код: `[data-test-id="ticket-number"]`
+   - Реальность: первый `<generic>` элемент внутри кнопки билета
 
-1. **data-test-id атрибуты**: 
-   - В коде расширения: `[data-test-id="number"]`, `[data-test-id="selected-number"]`
-   - На реальном сайте: Найдено 530 элементов с `[data-test-id="number"]` и 10 с `[data-test-id="selected-number"]`, но они НЕ относятся к числам в билетах
+3. **Кнопки билетов:**
+   - Код: `button[class*="Ticket_btn"]`
+   - Реальность: `button` элементы, содержащие текст "Билет №"
 
-2. **Кнопки управления**:
-   - В коде расширения: `[data-test-id="show-tickets"]`, `[data-test-id="other-tickets"]`
-   - На реальном сайте: Таких атрибутов НЕ найдено (0 элементов)
+### Актуальные селекторы
 
-3. **Селекторы билетов**:
-   - В коде расширения: `button[class*="Ticket_btn"]`
-   - На реальном сайте: `button.Ticket_btn__L4SXA` ✅ (соответствует)
+Рекомендуемые селекторы для обновления кода:
 
-### Рекомендации по исправлению
+```javascript
+// Кнопки чисел (1-90)
+const numberButtons = document.querySelectorAll('button');
+const numberButton = Array.from(numberButtons).find(btn => 
+  btn.textContent.trim() === targetNumber.toString()
+);
 
-1. **Числа в билетах**: Использовать селектор `generic` внутри билетов вместо `[data-test-id="number"]`
-2. **Кнопки управления**: Искать по тексту кнопок вместо data-test-id
-3. **Структура билета**: Учитывать реальную структуру с 6 строками по 15 позиций
+// Кнопка "Показать билеты"
+const showTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
+  btn.textContent.trim() === 'Показать билеты'
+);
 
-## Заключение
+// Билеты
+const tickets = Array.from(document.querySelectorAll('button')).filter(btn => 
+  btn.textContent.includes('Билет №')
+);
 
-Реальная структура сайта Столото значительно отличается от предположений в коде расширения. Основные элементы управления работают через поиск по тексту, а не через data-test-id атрибуты. Структура билетов более сложная и требует корректного парсинга для определения позиций чисел в строках и половинах билета.
+// Числа в билете
+const ticketNumbers = Array.from(ticket.querySelectorAll('generic')).filter(el => {
+  const text = el.textContent.trim();
+  return /^\d+$/.test(text);
+});
+
+// Кнопка "Другие билеты"
+const otherTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
+  btn.textContent.trim() === 'Другие билеты'
+);
+
+// Кнопка "Сбросить"
+const clearButton = Array.from(document.querySelectorAll('button')).find(btn => 
+  btn.textContent.trim() === 'Сбросить'
+);
+```
+
+## Примечания
+
+1. **Структура билета:** Билеты содержат 30 чисел, организованных в 6 строк по 5 чисел в каждой
+2. **Группировка:** Числа визуально разделены на два блока (строки 1-3 и 4-6)
+3. **Селекторы:** Большинство элементов не имеют специальных data-атрибутов, поэтому селекция основана на текстовом содержимом
+4. **Динамическое содержимое:** Билеты загружаются динамически после выбора чисел
+5. **Авторизация:** Элементы баланса и профиля появляются только для авторизованных пользователей

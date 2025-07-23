@@ -1,211 +1,291 @@
-# Справочник CSS селекторов сайта Столото
+# Справочник селекторов сайта Столото
 
 ## Обзор
 
-Данный документ содержит полный справочник CSS селекторов для взаимодействия с сайтом Столото, основанный на анализе реального сайта и сравнении с кодом расширения.
+Данный документ содержит актуальные CSS селекторы для всех элементов интерфейса сайта Столото, необходимых для работы расширения. Селекторы проверены на странице `https://www.stoloto.ru/ruslotto/game?viewType=favorite`.
 
-## Селекторы чисел билетов
+## Статус селекторов
 
-### Кнопки выбора чисел (1-90)
+### ✅ Работающие селекторы
 
-| Элемент | Рабочий селектор | Описание | Статус |
-|---------|------------------|----------|---------|
-| Кнопки чисел | `button[data-test-id="number"]` | Все кнопки чисел от 1 до 90 | ✅ Работает |
-| Поиск по тексту | `button` с `textContent === "N"` | Поиск кнопки по номеру числа | ✅ Работает |
-| CSS классы | `.ButtonNum_buttonNum__IOnWn` | Специфический класс для кнопок чисел | ✅ Работает |
+Эти селекторы актуальны и работают корректно:
 
-**Пример использования:**
+#### Числа для выбора (1-90)
+
+```css
+/* Все кнопки чисел */
+[data-test-id="number"]
+
+/* Контейнер со всеми числами */
+[data-test-id="number-list"]
+```
+
+**JavaScript селекция:**
 ```javascript
-// Метод 1: По data-test-id (рекомендуется)
+// Все кнопки чисел
 const numberButtons = document.querySelectorAll('[data-test-id="number"]');
 
-// Метод 2: Поиск конкретного числа по тексту
-const number7 = Array.from(document.querySelectorAll('button')).find(btn => 
-  btn.textContent.trim() === '7'
+// Конкретное число по тексту
+const numberButton = Array.from(document.querySelectorAll('button')).find(btn => 
+  btn.textContent.trim() === targetNumber.toString()
 );
 
-// Метод 3: По CSS классу
-const allNumberButtons = document.querySelectorAll('.ButtonNum_buttonNum__IOnWn');
+// Конкретное число по data-test-id (если есть дополнительные атрибуты)
+const numberButton = document.querySelector(`[data-test-id="number"][data-number="${targetNumber}"]`);
 ```
 
-### Выбранные числа
+#### Кнопки управления
 
-| Элемент | Рабочий селектор | Описание | Статус |
-|---------|------------------|----------|---------|
-| Выбранные кнопки | `button[active]` | Кнопки с атрибутом active | ✅ Работает |
-| Data-test-id | `[data-test-id="selected-number"]` | Элементы выбранных чисел | ⚠️ Не кнопки |
+```css
+/* Кнопка "Показать билеты" */
+button /* поиск по тексту */
 
-**Важно**: `[data-test-id="selected-number"]` НЕ относится к кнопкам чисел! Это отдельные элементы интерфейса.
-
-**Пример использования:**
-```javascript
-// Получить все выбранные кнопки чисел
-const selectedButtons = document.querySelectorAll('button[active]');
-
-// Проверить, выбрано ли конкретное число
-const isNumber7Selected = document.querySelector('button[active]')?.textContent.trim() === '7';
+/* Кнопка "Сбросить" */
+button /* поиск по тексту */
 ```
 
-## Кнопки управления
-
-### Кнопка "Показать билеты"
-
-| Свойство | Значение | Статус |
-|----------|----------|---------|
-| Текст | "Показать билеты" | ✅ |
-| Data-test-id | `other_ticket` | ❌ Неправильное название |
-| CSS классы | `Button_fluid__2K933 Button_largeSize__ciSMQ ButtonAdd_addBtn__JTQJu` | ✅ |
-| Селектор в коде | `[data-test-id="show-tickets"]` | ❌ Не существует |
-
-**Рекомендуемый селектор:**
+**JavaScript селекция:**
 ```javascript
-// Поиск по тексту (наиболее надежный)
-const showTicketsBtn = Array.from(document.querySelectorAll('button')).find(btn => 
+// Кнопка "Показать билеты"
+const showTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
   btn.textContent.trim() === 'Показать билеты'
 );
 
-// Альтернативный селектор по data-test-id
-const showTicketsBtn2 = document.querySelector('[data-test-id="other_ticket"]');
-```
-
-### Кнопка "Другие билеты"
-
-| Свойство | Значение | Статус |
-|----------|----------|---------|
-| Текст | "Другие билеты" | ✅ |
-| Data-test-id | `other_ticket` | ✅ |
-| CSS классы | `Button_fluid__2K933 Button_largeSize__ciSMQ ButtonAdd_addBtn__JTQJu` | ✅ |
-| Селектор в коде | `[data-test-id="other-tickets"]` | ❌ Не существует |
-
-**Рекомендуемый селектор:**
-```javascript
-// Поиск по тексту
-const otherTicketsBtn = Array.from(document.querySelectorAll('button')).find(btn => 
-  btn.textContent.trim() === 'Другие билеты'
-);
-
-// По data-test-id
-const otherTicketsBtn2 = document.querySelector('[data-test-id="other_ticket"]');
-```
-
-### Кнопка "Сбросить"
-
-| Свойство | Значение | Статус |
-|----------|----------|---------|
-| Текст | "Сбросить" | ✅ |
-| Data-test-id | `clear_btn` | ✅ |
-| CSS классы | `ButtonClear_btnClear__Qywjy` | ✅ |
-| Селектор в коде | Поиск по тексту "Очистить" | ❌ Неправильный текст |
-
-**Рекомендуемый селектор:**
-```javascript
-// По data-test-id (рекомендуется)
-const clearBtn = document.querySelector('[data-test-id="clear_btn"]');
-
-// Поиск по тексту
-const clearBtn2 = Array.from(document.querySelectorAll('button')).find(btn => 
+// Кнопка "Сбросить" 
+const resetButton = Array.from(document.querySelectorAll('button')).find(btn => 
   btn.textContent.trim() === 'Сбросить'
 );
 ```
 
-## Селекторы билетов
+#### Авторизация
 
-### Контейнеры билетов
+```css
+/* Ссылка на авторизацию (неавторизованное состояние) */
+a[href*="/auth"]
 
-| Элемент | Рабочий селектор | Описание | Статус |
-|---------|------------------|----------|---------|
-| Билеты | `button.Ticket_btn__L4SXA` | Кнопки билетов | ✅ Работает |
-| Альтернативный | `button[class*="Ticket"]` | Поиск по части класса | ✅ Работает |
-| Номера билетов | `[data-test-id="ticket-number"]` | Номера билетов | ✅ Работает |
+/* Ссылка на баланс (авторизованное состояние) */
+a[href="/private/wallet?int=header"]
 
-**Пример использования:**
-```javascript
-// Получить все билеты
-const tickets = document.querySelectorAll('button.Ticket_btn__L4SXA');
+/* Ссылка на бонусы (авторизованное состояние) */
+a[href="/private/bonus?int=header"]
 
-// Получить номера билетов
-const ticketNumbers = document.querySelectorAll('[data-test-id="ticket-number"]');
+/* Ссылка на мои билеты (авторизованное состояние) */
+a[href="/private/tickets/all?int=header"]
 ```
 
-### Числа в билетах
+### ⚠️ Частично работающие селекторы
 
-**Важно**: Числа в билетах НЕ имеют `data-test-id="number"` или `data-test-id="selected-number"`!
+Эти селекторы работают только после определенных действий:
 
-| Элемент | Рабочий селектор | Описание | Статус |
-|---------|------------------|----------|---------|
-| Числа в билете | `generic` внутри билета | Элементы с числами | ✅ Работает |
-| Селектор в коде | `[data-test-id="number"]` | Используется в коде | ❌ Неправильно |
+#### Билеты (появляются после нажатия "Показать билеты")
 
-**Правильный способ получения чисел из билета:**
+```css
+/* Селекторы, которые работают только после загрузки билетов */
+[data-test-id="ticket-number"]     /* Номера билетов */
+[data-test-id="selected-number"]   /* Выбранные числа в билетах */
+button[class*="Ticket_btn"]        /* Кнопки билетов */
+```
+
+#### Кнопка "Другие билеты"
+
 ```javascript
-function getTicketNumbers(ticketElement) {
-  // Получаем все generic элементы внутри билета
-  const numberElements = ticketElement.querySelectorAll('generic');
-  
-  // Фильтруем только те, что содержат числа
-  const numbers = Array.from(numberElements)
-    .map(el => parseInt(el.textContent.trim()))
-    .filter(num => !isNaN(num) && num >= 1 && num <= 90);
-    
-  return numbers;
+// Появляется только после загрузки билетов
+const otherTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
+  btn.textContent.trim() === 'Другие билеты'
+);
+```
+
+### ❌ Неработающие селекторы
+
+Эти селекторы из старого кода больше не работают:
+
+```css
+/* Устаревшие селекторы */
+[data-test-id="show-tickets"]      /* Не существует */
+[data-test-id="other-tickets"]     /* Не существует */
+button[data-test-id="clear"]       /* Не существует */
+```
+
+## Актуальные селекторы по категориям
+
+### Выбор чисел
+
+#### Кнопки чисел (1-90)
+
+```javascript
+// Рекомендуемый способ - через data-test-id
+const allNumberButtons = document.querySelectorAll('[data-test-id="number"]');
+
+// Альтернативный способ - через текст
+const numberButton = Array.from(document.querySelectorAll('button')).find(btn => {
+  const text = btn.textContent.trim();
+  return /^\d+$/.test(text) && parseInt(text) >= 1 && parseInt(text) <= 90;
+});
+
+// Поиск конкретного числа
+function findNumberButton(number) {
+  return Array.from(document.querySelectorAll('[data-test-id="number"]')).find(btn => 
+    btn.textContent.trim() === number.toString()
+  );
 }
 ```
 
-## Селекторы аутентификации
+#### Активные (выбранные) числа
 
-### Неавторизованный пользователь
-
-| Элемент | Рабочий селектор | Описание | Статус |
-|---------|------------------|----------|---------|
-| Ссылка входа | `a[href*="auth"]` | Ссылка "Вход и регистрация" | ✅ Работает |
-| Текст ссылки | "Вход и регистрация" | Текстовое содержимое | ✅ Работает |
-| CSS классы | `Button_primary__8vTWw Button_defaultSize__1RE37` | Стили кнопки | ✅ Работает |
-
-### Авторизованный пользователь
-
-| Элемент | Рабочий селектор | Описание | Статус |
-|---------|------------------|----------|---------|
-| Ссылка кошелька | `a[href*="private/wallet"]` | Баланс пользователя | ⚠️ Только для авторизованных |
-| Ссылка бонусов | `a[href*="private/bonus"]` | Бонусы пользователя | ⚠️ Только для авторизованных |
-| Мои билеты | `a[href*="private/tickets"]` | Личные билеты | ⚠️ Только для авторизованных |
-
-**Пример проверки авторизации:**
 ```javascript
+// Активные кнопки чисел имеют атрибут [active]
+const activeNumbers = document.querySelectorAll('[data-test-id="number"][active]');
+
+// Получение списка выбранных чисел
+function getSelectedNumbers() {
+  return Array.from(document.querySelectorAll('[data-test-id="number"][active]'))
+    .map(btn => parseInt(btn.textContent.trim()))
+    .filter(num => !isNaN(num));
+}
+```
+
+### Управление выбором
+
+#### Кнопка сброса
+
+```javascript
+// Кнопка "Сбросить"
+const resetButton = Array.from(document.querySelectorAll('button')).find(btn => 
+  btn.textContent.trim() === 'Сбросить'
+);
+
+// Функция очистки выбора
+async function clearSelection() {
+  const clearButton = resetButton;
+  if (clearButton) {
+    clearButton.click();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return true;
+  }
+  return false;
+}
+```
+
+#### Кнопка показа билетов
+
+```javascript
+// Кнопка "Показать билеты" (появляется после выбора чисел)
+const showTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
+  btn.textContent.trim() === 'Показать билеты'
+);
+
+// Проверка доступности кнопки
+function isShowTicketsAvailable() {
+  return !!Array.from(document.querySelectorAll('button')).find(btn => 
+    btn.textContent.trim() === 'Показать билеты'
+  );
+}
+```
+
+### Работа с билетами
+
+#### Поиск билетов
+
+```javascript
+// Все билеты (после загрузки)
+const tickets = Array.from(document.querySelectorAll('button')).filter(btn => 
+  btn.textContent.includes('Билет №')
+);
+
+// Альтернативный способ через класс (если доступен)
+const ticketsAlt = document.querySelectorAll('button[class*="Ticket_btn"]');
+```
+
+#### Номера билетов
+
+```javascript
+// Получение номера билета
+function getTicketNumber(ticketButton) {
+  // Способ 1: через data-test-id (если доступен)
+  const numberElement = ticketButton.querySelector('[data-test-id="ticket-number"]');
+  if (numberElement) {
+    return numberElement.textContent.trim();
+  }
+  
+  // Способ 2: через текстовое содержимое
+  const match = ticketButton.textContent.match(/Билет №(\d+)/);
+  return match ? match[1] : null;
+}
+```
+
+#### Числа в билете
+
+```javascript
+// Получение всех чисел из билета
+function getTicketNumbers(ticketButton) {
+  // Способ 1: через data-test-id (предпочтительный)
+  const numberElements = ticketButton.querySelectorAll('[data-test-id="number"], [data-test-id="selected-number"]');
+  if (numberElements.length > 0) {
+    return Array.from(numberElements)
+      .map(el => parseInt(el.textContent.trim()))
+      .filter(num => !isNaN(num));
+  }
+  
+  // Способ 2: через все generic элементы с числами
+  const allElements = ticketButton.querySelectorAll('generic');
+  return Array.from(allElements)
+    .map(el => el.textContent.trim())
+    .filter(text => /^\d+$/.test(text))
+    .map(text => parseInt(text))
+    .filter(num => num >= 1 && num <= 90);
+}
+
+// Группировка чисел по строкам (6 строк по 5 чисел)
+function groupTicketNumbersByRows(numbers) {
+  const rows = [];
+  for (let i = 0; i < numbers.length; i += 5) {
+    rows.push(numbers.slice(i, i + 5));
+  }
+  return rows;
+}
+```
+
+#### Навигация по билетам
+
+```javascript
+// Кнопка "Другие билеты"
+const otherTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
+  btn.textContent.trim() === 'Другие билеты'
+);
+
+// Проверка доступности навигации
+function isOtherTicketsAvailable() {
+  return !!Array.from(document.querySelectorAll('button')).find(btn => 
+    btn.textContent.trim() === 'Другие билеты'
+  );
+}
+```
+
+### Авторизация и баланс
+
+#### Проверка статуса авторизации
+
+```javascript
+// Проверка авторизации пользователя
 function isUserLoggedIn() {
-  // Если есть ссылка на вход - пользователь НЕ авторизован
-  const authLink = document.querySelector('a[href*="auth"]');
+  // Проверяем наличие ссылки на авторизацию (неавторизованное состояние)
+  const authLink = document.querySelector('a[href*="/auth"]');
   if (authLink && authLink.textContent.includes('Вход и регистрация')) {
     return false;
   }
   
-  // Если есть ссылки на приватные разделы - пользователь авторизован
-  const walletLink = document.querySelector('a[href*="private/wallet"]');
-  const bonusLink = document.querySelector('a[href*="private/bonus"]');
+  // Проверяем наличие элементов авторизованного пользователя
+  const walletLink = document.querySelector('a[href="/private/wallet?int=header"]');
+  const bonusLink = document.querySelector('a[href="/private/bonus?int=header"]');
   
   return !!(walletLink || bonusLink);
 }
 ```
 
-## Селекторы баланса и бонусов
+#### Получение баланса
 
-### Баланс пользователя
-
-| Элемент | Рабочий селектор | Описание | Статус |
-|---------|------------------|----------|---------|
-| Ссылка баланса | `a[href="/private/wallet?int=header"]` | Точная ссылка на кошелек | ✅ Работает |
-| Альтернативный | `a[href*="private/wallet"]` | Поиск по части URL | ✅ Работает |
-| Селектор в коде | `a[href="/private/wallet?int=header"]` | Используется в коде | ✅ Правильно |
-
-### Бонусы пользователя
-
-| Элемент | Рабочий селектор | Описание | Статус |
-|---------|------------------|----------|---------|
-| Ссылка бонусов | `a[href="/private/bonus?int=header"]` | Точная ссылка на бонусы | ✅ Работает |
-| Альтернативный | `a[href*="private/bonus"]` | Поиск по части URL | ✅ Работает |
-| Селектор в коде | `a[href="/private/bonus?int=header"]` | Используется в коде | ✅ Правильно |
-
-**Пример получения баланса:**
 ```javascript
+// Получение баланса пользователя
 function getUserBalance() {
   const balanceLink = document.querySelector('a[href="/private/wallet?int=header"]');
   if (balanceLink) {
@@ -216,64 +296,186 @@ function getUserBalance() {
   }
   return null; // Пользователь не авторизован
 }
+
+// Получение количества бонусов
+function getUserBonuses() {
+  const bonusLink = document.querySelector('a[href="/private/bonus?int=header"]');
+  if (bonusLink) {
+    const bonusText = bonusLink.textContent.trim();
+    const bonusNumber = parseInt(bonusText);
+    return isNaN(bonusNumber) ? 0 : bonusNumber;
+  }
+  return null; // Пользователь не авторизован
+}
 ```
 
-## Селекторы кнопок оплаты
+### Покупка билетов
 
-### Кнопки покупки и оплаты
+#### Кнопки оплаты
 
-| Элемент | Рабочий селектор | Описание | Статус |
-|---------|------------------|----------|---------|
-| Оплата кошельком | Поиск по тексту "Оплатить кошельком" | Кнопка оплаты | ⚠️ Появляется после выбора |
-| Оплата по QR | Поиск по тексту содержащему "QR" | QR-код оплата | ⚠️ Появляется после выбора |
-
-**Пример поиска кнопок оплаты:**
 ```javascript
+// Поиск кнопок оплаты (появляются после выбора билетов)
 function checkPaymentButtons() {
   const allButtons = Array.from(document.querySelectorAll('button'));
   
-  const payByWalletButton = allButtons.find(btn => 
-    btn.textContent.trim().includes('Оплатить кошельком')
+  const walletPaymentButton = allButtons.find(btn => 
+    btn.textContent.includes('Оплатить кошельком')
   );
   
-  const payByQRButton = allButtons.find(btn => 
-    btn.textContent.trim().includes('QR') || 
-    btn.textContent.trim().includes('Оплатить по QR')
+  const qrPaymentButton = allButtons.find(btn => 
+    btn.textContent.includes('QR') || btn.textContent.includes('СБП')
   );
   
   return {
-    walletPaymentAvailable: !!payByWalletButton,
-    qrPaymentAvailable: !!payByQRButton
+    walletPaymentAvailable: !!walletPaymentButton,
+    qrPaymentAvailable: !!qrPaymentButton,
+    walletButton: walletPaymentButton,
+    qrButton: qrPaymentButton
   };
 }
 ```
 
-## Несоответствия с кодом расширения
+## Рекомендации по использованию
 
-### Критические ошибки в селекторах
+### Приоритет селекторов
 
-| Селектор в коде | Реальность | Проблема | Решение |
-|-----------------|------------|----------|---------|
-| `[data-test-id="show-tickets"]` | Не существует | Кнопка не найдена | Использовать поиск по тексту |
-| `[data-test-id="other-tickets"]` | Не существует | Кнопка не найдена | Использовать `[data-test-id="other_ticket"]` |
-| Поиск "Очистить" | Текст "Сбросить" | Неправильный текст | Использовать "Сбросить" |
-| `[data-test-id="number"]` в билетах | Только для кнопок выбора | Неправильное применение | Использовать `generic` элементы |
+1. **Первый приоритет**: `data-test-id` атрибуты (наиболее стабильные)
+2. **Второй приоритет**: Поиск по текстовому содержимому
+3. **Третий приоритет**: CSS классы (могут изменяться)
 
-### Рекомендации по исправлению
+### Обработка ошибок
 
-1. **Кнопка "Показать билеты"**: Заменить селектор на поиск по тексту
-2. **Кнопка "Другие билеты"**: Использовать `[data-test-id="other_ticket"]`
-3. **Кнопка очистки**: Искать текст "Сбросить" вместо "Очистить"
-4. **Числа в билетах**: Парсить `generic` элементы внутри билетов
-5. **Выбранные числа**: Использовать атрибут `active` вместо `data-test-id="selected-number"`
+```javascript
+// Универсальная функция поиска элемента с fallback
+function findElement(selectors, textContent = null) {
+  // Пробуем каждый селектор по очереди
+  for (const selector of selectors) {
+    const elements = document.querySelectorAll(selector);
+    if (elements.length > 0) {
+      if (textContent) {
+        const found = Array.from(elements).find(el => 
+          el.textContent.trim().includes(textContent)
+        );
+        if (found) return found;
+      } else {
+        return elements[0];
+      }
+    }
+  }
+  
+  // Если ничего не найдено, возвращаем null
+  return null;
+}
 
-## Заключение
+// Пример использования
+const showButton = findElement(
+  ['[data-test-id="show-tickets"]', 'button'], 
+  'Показать билеты'
+);
+```
 
-Реальные селекторы сайта Столото значительно отличаются от предположений в коде расширения. Основные проблемы связаны с:
+### Ожидание загрузки элементов
 
-1. Неправильными `data-test-id` значениями
-2. Неточными текстами кнопок
-3. Неправильным пониманием структуры билетов
-4. Путаницей между элементами выбора чисел и числами в билетах
+```javascript
+// Ожидание появления элемента
+function waitForElement(selector, timeout = 5000) {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    
+    const checkElement = () => {
+      const element = document.querySelector(selector);
+      if (element) {
+        resolve(element);
+        return;
+      }
+      
+      if (Date.now() - startTime > timeout) {
+        reject(new Error(`Element ${selector} not found within ${timeout}ms`));
+        return;
+      }
+      
+      setTimeout(checkElement, 100);
+    };
+    
+    checkElement();
+  });
+}
 
-Для корректной работы расширения необходимо обновить все селекторы согласно данному справочнику.
+// Пример использования
+try {
+  const ticketsContainer = await waitForElement('[data-test-id="tickets-container"]', 3000);
+  // Работаем с билетами
+} catch (error) {
+  console.log('Билеты не загрузились:', error.message);
+}
+```
+
+## Изменения в коде расширения
+
+### Обновленные функции
+
+Рекомендуемые изменения в коде расширения:
+
+```javascript
+// modules/search.js - обновленная функция очистки
+async function clearSelection() {
+  // Обновленный селектор
+  const clearButton = Array.from(document.querySelectorAll('button')).find(btn => 
+    btn.textContent.trim() === 'Сбросить'  // Изменено с 'Очистить'
+  );
+  
+  if (clearButton) {
+    clearButton.click();
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return true;
+  }
+  return false;
+}
+
+// modules/main.js - обновленная функция поиска кнопки "Показать билеты"
+async function selectNumbers() {
+  // ... код выбора чисел ...
+  
+  const showTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
+    btn.textContent.trim() === 'Показать билеты'
+  );
+  
+  if (showTicketsButton) {
+    console.log('Нажимаем кнопку "Показать билеты"');
+    showTicketsButton.click();
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return true;
+  }
+  
+  return false;
+}
+```
+
+## Тестирование селекторов
+
+### Скрипт для проверки
+
+```javascript
+// Скрипт для тестирования всех селекторов
+function testSelectors() {
+  const results = {
+    numbers: document.querySelectorAll('[data-test-id="number"]').length,
+    selectedNumbers: document.querySelectorAll('[data-test-id="selected-number"]').length,
+    showTicketsButton: !!Array.from(document.querySelectorAll('button')).find(btn => 
+      btn.textContent.trim() === 'Показать билеты'
+    ),
+    resetButton: !!Array.from(document.querySelectorAll('button')).find(btn => 
+      btn.textContent.trim() === 'Сбросить'
+    ),
+    authLink: document.querySelectorAll('a[href*="/auth"]').length,
+    walletLink: document.querySelectorAll('a[href="/private/wallet?int=header"]').length,
+    isLoggedIn: isUserLoggedIn()
+  };
+  
+  console.table(results);
+  return results;
+}
+
+// Запуск теста
+testSelectors();
+```

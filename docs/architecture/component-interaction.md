@@ -1,8 +1,8 @@
-# Паттерны взаимодействия компонентов
+# Взаимодействие компонентов
 
 ## Введение
 
-Расширение "Столото Автокликер" использует сложную систему взаимодействия между компонентами для обеспечения надежной работы. Основные потоки коммуникации включают передачу сообщений между popup и content script, синхронизацию состояния через Chrome Storage, и обработку событий через service worker.
+Расширение "Столото Автокликер" использует современную модульную архитектуру с четко определенными паттернами взаимодействия между компонентами. Основные потоки коммуникации включают передачу сообщений между popup и content script через main.js, синхронизацию состояния через Chrome Storage API, и координацию работы модулей.
 
 ## Схема взаимодействия компонентов
 
@@ -10,28 +10,50 @@
 graph TB
     User[Пользователь] --> Popup[popup.js]
     Popup --> Storage[Chrome Storage]
-    Popup --> ContentScript[content.js]
-    ContentScript --> Storage
-    ContentScript --> WebPage[Страница Столото]
-    ServiceWorker[event_page.js] --> Popup
+    Popup --> |chrome.runtime.sendMessage| MainModule[main.js]
+    
+    MainModule --> StateModule[state.js]
+    MainModule --> SearchModule[search.js]
+    MainModule --> AuthModule[auth.js]
+    MainModule --> UIModule[ui.js]
+    MainModule --> PaymentModule[payment.js]
+    MainModule --> UtilsModule[utils.js]
+    
+    StateModule --> Storage
+    AuthModule --> WebPage[Страница Столото]
+    SearchModule --> WebPage
+    UIModule --> WebPage
+    PaymentModule --> WebPage
+    
+    ServiceWorker[background.js] --> Popup
     ServiceWorker --> Tabs[Chrome Tabs API]
     
+    subgraph "Модульная система"
+        MainModule
+        StateModule
+        SearchModule
+        AuthModule
+        UIModule
+        PaymentModule
+        UtilsModule
+    end
+    
     subgraph "Потоки данных"
-        Storage --> |Восстановление состояния| Popup
-        Storage --> |Продолжение поиска| ContentScript
-        ContentScript --> |Сохранение прогресса| Storage
-        Popup --> |Команды поиска| ContentScript
-        ContentScript --> |Статус выполнения| Popup
+        Storage --> |Восстановление состояния| StateModule
+        Storage --> |Продолжение поиска| MainModule
+        StateModule --> |Сохранение прогресса| Storage
+        Popup --> |Команды поиска| MainModule
+        MainModule --> |Статус выполнения| Popup
     end
 ```
 
 ## Типы взаимодействий
 
-### 1. Popup ↔ Content Script
+### 1. Popup ↔ Content Script через main.js
 
-Основной канал коммуникации для передачи команд и получения статуса выполнения.
+Основной канал коммуникации для передачи команд и получения статуса выполнения. Все сообщения обрабатываются через `setupMessageListener()` в main.js.
 
-#### Отправка команд от Popup к Content Script
+#### Отправка команд от Popup к main.js
 
 **Структура сообщения**:
 ```javascript
@@ -56,32 +78,90 @@ chrome.tabs.sendMessage(activeTab.id, {
 - `checkUserLogin` - проверка авторизации пользователя
 - `checkUserBalance` - проверка баланса пользователя
 
-#### Ответы от Content Script к Popup
+#### Обработка сообщений в main.js через setupMessageListener
 
-**Структура ответа**:
+**Обработчик сообщений**:
 ```javascript
-// Успешный ответ
+function setupMessageListener() {
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+        const state = window.stolotoState;
+        
+        console.log('Получено сообщение:', request);
+        
+        if (request.action === 'clickNumbers') {
+            // Проверка авторизации для режима покупки
+            const needsAuth = request.isPurchaseMode;
+            
+            if (needsAuth && !window.stolotoAuth.isUserLoggedIn()) {
+                window.stolotoUI.showAuthWarning();
+                state.saveAuthStatus();
+                sendResponse({
+                    status: 'error', 
+                    message: 'Для использования режима автоматической покупки необходимо авторизоваться на сайте Столото'
+                });
+                return true;
+            }
+            
+            // Установка параметров в state.js
+            state.isPurchaseMode = request.isPurchaseMode || false;
+            state.totalTicketsToBuy = request.ticketsToBuy || 0;
+            state.purchaseSearchNumbers = request.numbers;
+            state.purchaseExcludeNumbers = request.excludeNumbers || [];
+            state.purchaseSearchMode = request.mode;
+            
+            // Запуск поиска через search.js
+            window.stolotoSearch.clearSelection().then(() => {
+                clickNumbers(request.numbers, request.mode, request.excludeNumbers || []);
+                sendResponse({status: 'success'});
+            });
+            return true;
+            
+        } else if (request.action === 'checkUserLogin') {
+            // Проверка через auth.js
+            const isLoggedIn = window.stolotoAuth.isUserLoggedIn();
+            state.saveAuthStatus();
+            sendResponse({ isLoggedIn: isLoggedIn });
+            return true;
+            
+        } else if (request.action === 'checkUserBalance') {
+            // Проверка баланса через auth.js
+            const userBalance = window.stolotoAuth.getUserBalance();
+            const hasEnough = window.stolotoAuth.hasEnoughFunds(request.ticketsToBuy || 1);
+            
+            sendResponse({
+                balance: userBalance,
+                hasEnoughFunds: hasEnough,
+                requiredAmount: (request.ticketsToBuy || 1) * 150
+            });
+            return true;
+        }
+    });
+}
+```
+
+**Структуры ответов**:
+```javascript
+// Успешный запуск поиска
 {
-    status: 'success',
-    data: { /* дополнительные данные */ }
+    status: 'success'
 }
 
-// Ответ с ошибкой
+// Ошибка авторизации
 {
     status: 'error',
-    message: 'Описание ошибки'
+    message: 'Для использования режима автоматической покупки необходимо авторизоваться на сайте Столото'
 }
 
 // Ответ проверки авторизации
 {
-    isLoggedIn: true,
-    timestamp: Date.now()
+    isLoggedIn: true
 }
 
 // Ответ проверки баланса
 {
     balance: 1500,
-    hasEnoughFunds: true
+    hasEnoughFunds: true,
+    requiredAmount: 450
 }
 ```
 
@@ -103,14 +183,14 @@ chrome.tabs.sendMessage(tab.id, message, (response) => {
 });
 ```
 
-### 2. Синхронизация состояния через Chrome Storage
+### 2. Синхронизация состояния через Chrome Storage API
 
-Chrome Storage API используется для персистентного хранения данных между сессиями и компонентами.
+Chrome Storage API используется для персистентного хранения данных между сессиями и компонентами. Управление состоянием централизовано в модуле state.js.
 
 #### Схема данных в Storage
 
 ```javascript
-// Последний поиск
+// Последний поиск (управляется popup.js)
 lastSearch: {
     numbers: [1, 5, 12, 23, 34],
     excludeNumbers: [7, 14, 21],
@@ -120,7 +200,7 @@ lastSearch: {
     timestamp: 1640995200000
 }
 
-// Состояние покупки
+// Состояние покупки (управляется state.js)
 purchaseState: {
     isPurchaseMode: true,
     totalTicketsToBuy: 5,
@@ -133,7 +213,7 @@ purchaseState: {
     timestamp: 1640995800000
 }
 
-// Статус авторизации
+// Статус авторизации (управляется state.js)
 authStatus: {
     isLoggedIn: true,
     timestamp: 1640995200000
@@ -157,18 +237,35 @@ async function saveSearchParams(numbers, excludeNumbers, mode, isPurchaseMode, t
     });
 }
 
-// В content.js - сохранение состояния покупки
+// В state.js - сохранение состояния покупки
 async function savePurchaseState() {
+    const state = window.stolotoState;
     await chrome.storage.local.set({
         purchaseState: {
-            isPurchaseMode,
-            totalTicketsToBuy,
-            ticketsPurchased,
-            purchaseSearchNumbers,
-            purchaseExcludeNumbers,
-            purchaseSearchMode,
-            purchaseTicketsChecked,
-            purchaseStartTime,
+            isPurchaseMode: state.isPurchaseMode,
+            totalTicketsToBuy: state.totalTicketsToBuy,
+            ticketsPurchased: state.ticketsPurchased,
+            purchaseSearchNumbers: state.purchaseSearchNumbers,
+            purchaseExcludeNumbers: state.purchaseExcludeNumbers,
+            purchaseSearchMode: state.purchaseSearchMode,
+            purchaseTicketsChecked: state.purchaseTicketsChecked,
+            purchaseStartTime: state.purchaseStartTime,
+            timestamp: Date.now()
+        }
+    });
+    console.log('Состояние покупки сохранено:', {
+        ticketsPurchased: state.ticketsPurchased,
+        totalTicketsToBuy: state.totalTicketsToBuy
+    });
+}
+
+// В state.js - сохранение статуса авторизации
+async function saveAuthStatus() {
+    const isLoggedIn = window.stolotoAuth.isUserLoggedIn();
+    
+    await chrome.storage.local.set({
+        authStatus: {
+            isLoggedIn,
             timestamp: Date.now()
         }
     });
@@ -196,50 +293,97 @@ async function loadLastSearchParams() {
     }
 }
 
-// В content.js - восстановление состояния покупки
+// В state.js - восстановление состояния покупки
 async function loadPurchaseState() {
-    const data = await chrome.storage.local.get('purchaseState');
-    if (data.purchaseState) {
-        isPurchaseMode = data.purchaseState.isPurchaseMode;
-        totalTicketsToBuy = data.purchaseState.totalTicketsToBuy;
-        ticketsPurchased = data.purchaseState.ticketsPurchased;
-        // ... восстановление остальных параметров
-        
-        // Продолжение поиска, если покупка не завершена
-        if (isPurchaseMode && ticketsPurchased < totalTicketsToBuy) {
-            setTimeout(() => {
-                clearSelection().then(() => {
-                    clickNumbers(purchaseSearchNumbers, purchaseSearchMode, purchaseExcludeNumbers);
-                });
-            }, 1500);
+    try {
+        const data = await chrome.storage.local.get('purchaseState');
+        if (data.purchaseState) {
+            const state = window.stolotoState;
+            const savedState = data.purchaseState;
+            
+            // Восстановление всех параметров состояния
+            state.isPurchaseMode = savedState.isPurchaseMode;
+            state.totalTicketsToBuy = savedState.totalTicketsToBuy;
+            state.ticketsPurchased = savedState.ticketsPurchased;
+            state.purchaseSearchNumbers = savedState.purchaseSearchNumbers;
+            state.purchaseExcludeNumbers = savedState.purchaseExcludeNumbers;
+            state.purchaseSearchMode = savedState.purchaseSearchMode;
+            state.purchaseTicketsChecked = savedState.purchaseTicketsChecked || 0;
+            state.purchaseStartTime = savedState.purchaseStartTime || null;
+            
+            // Проверка авторизации перед продолжением
+            if (state.isPurchaseMode && !window.stolotoAuth.isUserLoggedIn()) {
+                console.log('❌ Пользователь вышел из аккаунта, отменяем режим покупки');
+                window.stolotoUI.showAuthWarning();
+                await resetPurchaseState();
+                return;
+            }
+            
+            // Продолжение покупки, если она не завершена
+            if (state.isPurchaseMode && state.ticketsPurchased < state.totalTicketsToBuy) {
+                console.log('Продолжаем покупку билетов, осталось купить:', 
+                           state.totalTicketsToBuy - state.ticketsPurchased);
+                
+                // Восстановление счетчиков и UI
+                state.ticketsChecked = state.purchaseTicketsChecked;
+                state.searchStartTime = state.purchaseStartTime;
+                
+                window.stolotoUI.updateStatusBlock(
+                    state.purchaseSearchNumbers, 
+                    state.purchaseExcludeNumbers, 
+                    state.purchaseSearchMode
+                );
+                
+                // Запуск поиска с задержкой
+                setTimeout(() => {
+                    window.stolotoSearch.clearSelection().then(() => {
+                        window.stolotoMain.clickNumbers(
+                            state.purchaseSearchNumbers, 
+                            state.purchaseSearchMode, 
+                            state.purchaseExcludeNumbers
+                        );
+                    });
+                }, 1500);
+            }
         }
+    } catch (error) {
+        console.error('Ошибка при загрузке состояния покупки:', error);
     }
 }
 ```
 
-### 3. Service Worker ↔ Tabs Management
+### 3. Background Service Worker ↔ Tabs Management
 
-Service Worker управляет навигацией и активацией расширения.
+Background Service Worker управляет навигацией и активацией расширения в соответствии с требованиями Manifest V3.
 
-#### Обработка кликов по иконке
+#### Обработка кликов по иконке в background.js
 
 ```javascript
 chrome.action.onClicked.addListener(async (tab) => {
+    // URL рабочей страницы приложения
     const workPageUrl = 'https://www.stoloto.ru/ruslotto/game?viewType=favorite';
     
+    // Если текущая вкладка - рабочая страница приложения
     if (tab.url === workPageUrl) {
-        // Пользователь уже на рабочей странице - открываем popup
+        // Открываем popup
         await chrome.action.setPopup({ popup: 'popup.html' });
+        // Имитируем повторный клик, чтобы открыть popup
         await chrome.action.openPopup();
     } else {
-        // Перенаправляем на рабочую страницу
+        // Если текущая вкладка не рабочая, открываем новую
         await chrome.tabs.create({ url: workPageUrl });
     }
     
-    // Сбрасываем popup для следующего клика
+    // Сбрасываем popup, чтобы следующий клик снова прошёл через этот обработчик
     await chrome.action.setPopup({ popup: '' });
 });
 ```
+
+**Особенности Service Worker**:
+- Событийная модель активации
+- Ограниченное время жизни
+- Отсутствие доступа к DOM
+- Работа только с Chrome APIs
 
 ## Обработка событий
 
@@ -271,33 +415,42 @@ document.addEventListener('DOMContentLoaded', async () => {
 #### Content Script инициализация
 
 ```javascript
-// Автоматическая загрузка состояния при загрузке страницы
-loadPurchaseState();
-
-// Сохранение статуса авторизации
-saveAuthStatus();
-
-// Регистрация обработчика сообщений
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('Получено сообщение:', request);
+// В content.js - точка входа и координатор модулей
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM загружен, инициализируем расширение...');
     
-    switch(request.action) {
-        case 'clickNumbers':
-            handleClickNumbers(request, sendResponse);
-            break;
-        case 'stopSearch':
-            handleStopSearch(request, sendResponse);
-            break;
-        case 'checkUserLogin':
-            handleCheckUserLogin(request, sendResponse);
-            break;
-        case 'checkUserBalance':
-            handleCheckUserBalance(request, sendResponse);
-            break;
+    // Проверяем, что все модули загружены
+    const requiredModules = ['stolotoState', 'stolotoAuth', 'stolotoUI', 
+                           'stolotoUtils', 'stolotoPayment', 'stolotoSearch', 'stolotoMain'];
+    const missingModules = requiredModules.filter(module => !window[module]);
+    
+    if (missingModules.length > 0) {
+        console.error('Не загружены модули:', missingModules);
+        return;
     }
     
-    return true; // Асинхронный ответ
+    console.log('Все модули успешно загружены');
+    
+    // Настраиваем обработчик сообщений через main.js
+    window.stolotoMain.setupMessageListener();
+    
+    // Загружаем состояние покупки через state.js
+    window.stolotoState.loadPurchaseState();
+    
+    // Сохраняем статус авторизации через state.js
+    window.stolotoState.saveAuthStatus();
 });
+
+// Обработка случая, когда DOM уже загружен
+if (document.readyState === 'loading') {
+    // DOM еще загружается, ждем события DOMContentLoaded
+} else {
+    // DOM уже загружен
+    setTimeout(() => {
+        const event = new Event('DOMContentLoaded');
+        document.dispatchEvent(event);
+    }, 100);
+}
 ```
 
 ### 2. Механизмы синхронизации состояния
@@ -365,11 +518,12 @@ async function checkActiveTabAuth() {
 }
 ```
 
-#### Обновление UI в реальном времени
+#### Обновление UI в реальном времени через ui.js
 
 ```javascript
-// Обновление статуса поиска на странице
+// В ui.js - обновление статуса поиска на странице
 function updateStatusBlock(numbers, excludeNumbers, mode) {
+    const state = window.stolotoState;
     let statusEl = document.getElementById('rusloto-status');
     if (!statusEl) {
         statusEl = document.createElement('div');
@@ -378,31 +532,57 @@ function updateStatusBlock(numbers, excludeNumbers, mode) {
         document.body.insertBefore(statusEl, document.body.firstChild);
     }
 
-    // Формирование текста статуса
+    let modeText = '';
+    switch(mode) {
+        case 'anywhere':
+            modeText = 'в любом месте билета';
+            break;
+        case 'half':
+            modeText = 'в одной половине билета';
+            break;
+        case 'row':
+            modeText = 'в одной строке билета';
+            break;
+    }
+
     const numbersText = numbers.join(', ');
-    const excludeText = excludeNumbers.length > 0 ? ` за исключением ${excludeNumbers.join(', ')}` : '';
-    const ticketsText = ticketsChecked > 0 ? `Проверено билетов: ${ticketsChecked}` : '';
-    const timeText = searchStartTime ? `Время поиска: ${formatSearchTime()}` : '';
+    const excludeText = excludeNumbers.length > 0 
+        ? ` за исключением ${excludeNumbers.join(', ')}` 
+        : '';
+    const ticketsText = state.ticketsChecked > 0 ? `Проверено билетов: ${state.ticketsChecked}` : '';
+    const timeText = state.searchStartTime ? `Время поиска: ${window.stolotoUtils.formatSearchTime()}` : '';
     
     let statusText = `Ищем числа ${numbersText}${excludeText} ${modeText}`;
     
+    // Добавляем информацию о поиске
     if (ticketsText || timeText) {
         statusText += `\n${ticketsText}${ticketsText && timeText ? '. ' : ''}${timeText}`;
     }
     
-    // Информация о режиме покупки
-    if (isPurchaseMode) {
-        const purchaseText = `Автоматическая покупка. Куплено билетов: ${ticketsPurchased} из ${totalTicketsToBuy}`;
+    // Если активен режим покупки, добавляем информацию о нём
+    if (state.isPurchaseMode) {
+        const purchaseText = `Автоматическая покупка. Куплено билетов: ${state.ticketsPurchased} из ${state.totalTicketsToBuy}`;
         statusText += `\n${purchaseText}`;
         
-        // Изменение цвета при завершении
-        if (ticketsPurchased >= totalTicketsToBuy) {
-            statusEl.style.background = '#28a745'; // зеленый
+        // Меняем цвет только когда процесс покупки завершен
+        if (state.ticketsPurchased >= state.totalTicketsToBuy) {
+            statusEl.style.background = '#28a745'; // зеленый - завершено
+        } else {
+            // В процессе поиска сохраняем стандартный синий цвет
+            statusEl.style.background = '#007bff';
         }
     }
     
     statusEl.textContent = statusText;
 }
+
+// Экспорт в глобальное пространство
+window.stolotoUI = {
+    updateStatusBlock,
+    removeStatusBlock,
+    showAuthWarning,
+    showInsufficientFundsWarning
+};
 ```
 
 ## Процедуры восстановления соединения
@@ -440,28 +620,67 @@ function sendMessageWithRetry(tabId, message, maxRetries = 3) {
 ### 2. Восстановление после перезагрузки страницы
 
 ```javascript
-// В content.js - автоматическое восстановление состояния
-window.addEventListener('load', async () => {
-    console.log('Страница загружена, проверяем состояние...');
-    
-    // Загружаем сохраненное состояние покупки
-    await loadPurchaseState();
-    
-    // Если есть незавершенная покупка, продолжаем
-    if (isPurchaseMode && ticketsPurchased < totalTicketsToBuy) {
-        console.log('Обнаружена незавершенная покупка, продолжаем...');
-        
-        // Восстанавливаем статус блок
-        updateStatusBlock(purchaseSearchNumbers, purchaseExcludeNumbers, purchaseSearchMode);
-        
-        // Продолжаем поиск с задержкой для полной загрузки страницы
-        setTimeout(() => {
-            clearSelection().then(() => {
-                clickNumbers(purchaseSearchNumbers, purchaseSearchMode, purchaseExcludeNumbers);
-            });
-        }, 1500);
+// В state.js - автоматическое восстановление состояния через loadPurchaseState()
+async function loadPurchaseState() {
+    try {
+        const data = await chrome.storage.local.get('purchaseState');
+        if (data.purchaseState) {
+            const state = window.stolotoState;
+            const savedState = data.purchaseState;
+            
+            // Восстановление параметров состояния
+            state.isPurchaseMode = savedState.isPurchaseMode;
+            state.totalTicketsToBuy = savedState.totalTicketsToBuy;
+            state.ticketsPurchased = savedState.ticketsPurchased;
+            state.purchaseSearchNumbers = savedState.purchaseSearchNumbers;
+            state.purchaseExcludeNumbers = savedState.purchaseExcludeNumbers;
+            state.purchaseSearchMode = savedState.purchaseSearchMode;
+            state.purchaseTicketsChecked = savedState.purchaseTicketsChecked || 0;
+            state.purchaseStartTime = savedState.purchaseStartTime || null;
+            
+            // Проверяем авторизацию перед продолжением режима покупки
+            if (state.isPurchaseMode && !window.stolotoAuth.isUserLoggedIn()) {
+                console.log('❌ Пользователь вышел из аккаунта, отменяем режим покупки');
+                window.stolotoUI.showAuthWarning();
+                await resetPurchaseState();
+                return;
+            }
+            
+            // Если покупка еще не завершена, продолжаем поиск
+            if (state.isPurchaseMode && state.ticketsPurchased < state.totalTicketsToBuy) {
+                console.log('Продолжаем покупку билетов, осталось купить:', 
+                           state.totalTicketsToBuy - state.ticketsPurchased);
+                
+                // Восстанавливаем счетчик просмотренных билетов и время поиска
+                state.ticketsChecked = state.purchaseTicketsChecked;
+                state.searchStartTime = state.purchaseStartTime;
+                
+                // Обновляем блок статуса через ui.js
+                window.stolotoUI.updateStatusBlock(
+                    state.purchaseSearchNumbers, 
+                    state.purchaseExcludeNumbers, 
+                    state.purchaseSearchMode
+                );
+                
+                // Запускаем поиск с задержкой для загрузки страницы
+                setTimeout(() => {
+                    window.stolotoSearch.clearSelection().then(() => {
+                        window.stolotoMain.clickNumbers(
+                            state.purchaseSearchNumbers, 
+                            state.purchaseSearchMode, 
+                            state.purchaseExcludeNumbers
+                        );
+                    });
+                }, 1500);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке состояния покупки:', error);
     }
-});
+}
+
+// Вызывается автоматически при инициализации в content.js
+window.stolotoState.loadPurchaseState();
 ```
 
 ### 3. Обработка таймаутов
@@ -524,27 +743,70 @@ async function validateStateConsistency() {
 ### 2. Синхронизация между компонентами
 
 ```javascript
-// Централизованное обновление состояния авторизации
-async function updateAuthStatus(isLoggedIn) {
-    const authData = {
-        isLoggedIn: isLoggedIn,
-        timestamp: Date.now()
-    };
+// В state.js - централизованное обновление состояния авторизации
+async function saveAuthStatus() {
+    const isLoggedIn = window.stolotoAuth.isUserLoggedIn();
     
-    // Сохраняем в storage
-    await chrome.storage.local.set({ authStatus: authData });
+    // Получаем элементы страницы для отладки
+    const authElements = Array.from(document.querySelectorAll('div'))
+        .filter(div => div.textContent && div.textContent.toLowerCase().includes('вход'))
+        .map(el => el.textContent.trim());
     
-    // Обновляем локальную переменную
-    isUserAuthenticated = isLoggedIn;
+    console.log('Сохраняем статус авторизации:', isLoggedIn);
+    console.log('Найдены элементы авторизации:', authElements);
     
-    // Уведомляем другие компоненты через storage events
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace === 'local' && changes.authStatus) {
-            console.log('Статус авторизации обновлен:', changes.authStatus.newValue);
-            updateAuthDependentUI();
+    await chrome.storage.local.set({
+        authStatus: {
+            isLoggedIn,
+            timestamp: Date.now()
         }
     });
 }
+
+// В popup.js - обновление UI при изменении авторизации
+function updateAuthDependentUI() {
+    console.log('Обновление UI, статус авторизации:', isUserAuthenticated);
+    
+    // Если пользователь не авторизован:
+    if (!isUserAuthenticated) {
+        // Отключаем чекбокс режима покупки
+        testPurchaseModeCheckbox.disabled = true;
+        
+        // Обновляем текст предупреждения
+        authWarningElement.innerHTML = '<strong>Внимание!</strong> Для автоматической покупки необходимо авторизоваться на сайте Столото.';
+        
+        // Показываем предупреждение
+        authWarningElement.style.display = 'block';
+        
+        // Снимаем отметку с чекбокса и скрываем настройки
+        testPurchaseModeCheckbox.checked = false;
+        purchaseOptionsContainer.style.display = 'none';
+    } else {
+        // Если пользователь авторизован:
+        // Включаем чекбокс
+        testPurchaseModeCheckbox.disabled = false;
+        
+        // Скрываем предупреждение
+        authWarningElement.style.display = 'none';
+        
+        // Сохраняем состояние авторизации
+        chrome.storage.local.set({
+            authStatus: {
+                isLoggedIn: isUserAuthenticated,
+                timestamp: Date.now()
+            }
+        });
+    }
+}
+
+// Отслеживание изменений в Chrome Storage
+chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local' && changes.authStatus) {
+        console.log('Статус авторизации обновлен:', changes.authStatus.newValue);
+        isUserAuthenticated = changes.authStatus.newValue.isLoggedIn;
+        updateAuthDependentUI();
+    }
+});
 ```
 
 ## Лучшие практики взаимодействия
