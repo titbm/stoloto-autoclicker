@@ -657,7 +657,7 @@ button.addEventListener('click', async () => {
                 pageState = await checkPageLoadState();
             }
             
-            // Если страница все еще не готова, просто не запускаем поиск
+            // Если страница все еще не готова, не запускаем поиск
             if (!pageState.isReady && pageState.isStolotoPage) {
                 console.log('Страница Столото еще не готова, пропускаем запуск');
                 button.disabled = false;
@@ -855,17 +855,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!isSearching) {
             try {
                 const pageState = await checkPageLoadState();
-                // Блокируем кнопку только если это точно страница Столото, но она не готова
-                // Если проверка не удалась, оставляем кнопку доступной
                 const shouldDisable = !pageState.checkFailed && pageState.isStolotoPage && !pageState.isReady;
                 updateButtonState(!shouldDisable);
+                // Если кнопка найдена, останавливаем проверки
+                if (!shouldDisable) {
+                    clearInterval(pageLoadCheckInterval);
+                }
             } catch (error) {
                 console.log('Ошибка в периодической проверке:', error);
-                // При ошибке оставляем кнопку доступной
                 updateButtonState(true);
             }
         }
-    }, 4000); // Проверяем каждые 4 секунды (увеличили интервал)
+    }, 1500); // Проверяем только до первого успеха
 
     // Очищаем интервал при закрытии popup (если возможно)
     window.addEventListener('beforeunload', () => {
