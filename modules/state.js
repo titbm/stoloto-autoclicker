@@ -8,6 +8,7 @@ window.stolotoState = {
     // Состояние поиска
     isSearching: false,
     searchMode: 'half', // Режим поиска по умолчанию
+    excludeNumbers: [], // Исключаемые числа в обычном режиме
     ticketsChecked: 0, // Счетчик просмотренных билетов
     searchStartTime: null, // Время начала поиска
 

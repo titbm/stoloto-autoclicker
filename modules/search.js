@@ -5,9 +5,9 @@
 
 // Функция очистки выбранных чисел
 async function clearSelection() {
-    // Находим и нажимаем кнопку "Очистить"
+    // Находим и нажимаем кнопку "Сбросить" (обновленная структура сайта)
     const clearButton = Array.from(document.querySelectorAll('button')).find(btn => 
-        btn.textContent.trim() === 'Очистить'
+        btn.textContent.trim() === 'Сбросить'
     );
     
     if (clearButton) {
@@ -21,48 +21,69 @@ async function clearSelection() {
 // Функция для анализа билета
 function analyzeTicket(ticket, numbers) {
     const state = window.stolotoState;
-    const allNumbers = Array.from(ticket.querySelectorAll('[data-test-id="number"], [data-test-id="selected-number"]'));
     
-    // Группируем числа по 9 (в каждой строке по 9 чисел)
-    const rows = [];
-    for (let i = 0; i < allNumbers.length; i += 9) {
-        rows.push(allNumbers.slice(i, i + 9));
-    }
+    // Получаем все числа из дочерних generic элементов билета
+    const numberElements = Array.from(ticket.querySelectorAll('*')).filter(el => {
+        const text = el.textContent?.trim();
+        if (!text) return false;
+        const num = parseInt(text);
+        return !isNaN(num) && num >= 1 && num <= 90 && text === num.toString();
+    });
     
-    if (rows.length !== 6) {
-        console.log('Неверное количество строк в билете');
+    if (numberElements.length === 0) {
+        console.log('Не найдены числовые элементы в билете');
         return false;
     }
-
-    console.log('Анализ билета:', ticket.querySelector('[data-test-id="ticket-number"]')?.textContent);
-
-    // Получаем все числа из билета
-    const ticketNumbers = rows
-        .flat()
-        .map(num => parseInt(num.textContent.trim()))
-        .filter(num => !isNaN(num));
+    
+    const ticketNumbers = numberElements.map(el => parseInt(el.textContent.trim()));
+    
+    // Берем только первые 30 чисел (на случай если есть лишние)
+    const validNumbers = ticketNumbers.slice(0, 30);
+    
+    // Извлекаем номер билета из текста для отладки
+    const ticketText = ticket.textContent || '';
+    const ticketNumber = ticketText.match(/Билет №(\d+)/)?.[1] || 'неизвестен';
+    
+    console.log(`\n=== АНАЛИЗ БИЛЕТА ${ticketNumber} ===`);
+    console.log('Найденные элементы с числами:', numberElements.length);
+    console.log('Извлечены числа:', validNumbers);
+    console.log('Количество чисел:', validNumbers.length);
+    console.log('Ищем числа:', numbers);
+    
+    if (validNumbers.length !== 30) {
+        console.log('❌ Неверное количество чисел в билете:', validNumbers.length);
+        return false;
+    }
+    
+    // Разделяем числа на 6 строк по 5 чисел в каждой (как в реальном билете)
+    const rows = [];
+    for (let i = 0; i < 6; i++) {
+        const startIndex = i * 5;
+        rows.push(validNumbers.slice(startIndex, startIndex + 5));
+    }
+    
+    console.log('Строки билета:');
+    rows.forEach((row, i) => console.log(`Строка ${i + 1}:`, row));
 
     // Проверяем, нет ли исключаемых чисел в билете
-    const excludeNumbers = state.isPurchaseMode ? state.purchaseExcludeNumbers : [];
-    if (excludeNumbers.length > 0) {
-        const hasExcluded = excludeNumbers.some(num => ticketNumbers.includes(parseInt(num)));
+    const excludeNumbers = state.isPurchaseMode ? state.purchaseExcludeNumbers : state.excludeNumbers;
+    console.log('Исключаемые числа:', excludeNumbers);
+    if (excludeNumbers && excludeNumbers.length > 0) {
+        const hasExcluded = excludeNumbers.some(num => validNumbers.includes(parseInt(num)));
         if (hasExcluded) {
-            console.log('❌ В билете найдены исключаемые числа');
+            console.log('❌ В билете найдены исключаемые числа:', excludeNumbers.filter(num => validNumbers.includes(parseInt(num))));
             return false;
         }
     }
 
     const searchMode = state.isPurchaseMode ? state.purchaseSearchMode : state.searchMode;
+    console.log('Режим поиска:', searchMode);
     
     switch (searchMode) {
         case 'row': {
             // Проверяем каждую строку
             for (const row of rows) {
-                const rowNumbers = row
-                    .map(num => parseInt(num.textContent.trim()))
-                    .filter(num => !isNaN(num));
-                    
-                const allInRow = numbers.every(num => rowNumbers.includes(parseInt(num)));
+                const allInRow = numbers.every(num => row.includes(parseInt(num)));
                 if (allInRow) {
                     console.log('✅ Все числа найдены в одной строке!');
                     return true;
@@ -72,16 +93,10 @@ function analyzeTicket(ticket, numbers) {
         }
         case 'half': {
             // Первая половина - первые три строки
-            const firstHalf = rows.slice(0, 3)
-                .flat()
-                .map(num => parseInt(num.textContent.trim()))
-                .filter(num => !isNaN(num));
+            const firstHalf = rows.slice(0, 3).flat();
 
             // Вторая половина - последние три строки
-            const secondHalf = rows.slice(3)
-                .flat()
-                .map(num => parseInt(num.textContent.trim()))
-                .filter(num => !isNaN(num));
+            const secondHalf = rows.slice(3).flat();
 
             console.log('Числа в первой половине:', firstHalf);
             console.log('Числа во второй половине:', secondHalf);
@@ -97,7 +112,7 @@ function analyzeTicket(ticket, numbers) {
             return allInFirstHalf || allInSecondHalf;
         }
         case 'anywhere': {
-            const allFound = numbers.every(num => ticketNumbers.includes(parseInt(num)));
+            const allFound = numbers.every(num => validNumbers.includes(parseInt(num)));
             if (allFound) console.log('✅ Все числа найдены в билете!');
             return allFound;
         }
@@ -112,8 +127,10 @@ async function findSuitableTicket(numbers) {
     const state = window.stolotoState;
     
     while (state.isSearching) {
-        // Ищем все билеты
-        const tickets = document.querySelectorAll('button[class*="Ticket_btn"]');
+        // Ищем все билеты (новая структура - кнопки с текстом "Билет №")
+        const tickets = Array.from(document.querySelectorAll('button')).filter(btn => 
+            btn.textContent.includes('Билет №')
+        );
         console.log(`\nАнализируем ${tickets.length} билетов...`);
         let foundTicketsOnPage = [];
         
@@ -128,12 +145,14 @@ async function findSuitableTicket(numbers) {
                 state.purchaseStartTime = state.searchStartTime;
             }
             
-            const excludeNumbers = state.isPurchaseMode ? state.purchaseExcludeNumbers : [];
+            const excludeNumbers = state.isPurchaseMode ? state.purchaseExcludeNumbers : state.excludeNumbers;
             const mode = state.isPurchaseMode ? state.purchaseSearchMode : state.searchMode;
             window.stolotoUI.updateStatusBlock(numbers, excludeNumbers, mode);
             
             if (analyzeTicket(ticket, numbers)) {
-                const ticketNumber = ticket.querySelector('[data-test-id="ticket-number"]')?.textContent || 'неизвестен';
+                // Извлекаем номер билета из текста кнопки (новая структура)
+                const ticketText = ticket.textContent || '';
+                const ticketNumber = ticketText.match(/Билет №(\d+)/)?.[1] || 'неизвестен';
                 console.log('🎯 Найден подходящий билет:', ticketNumber);
                 foundTicketsOnPage.push(ticket);
                 
@@ -159,7 +178,9 @@ async function findSuitableTicket(numbers) {
             for (const ticket of foundTicketsOnPage) {
                 if (!state.isSearching) return false;
                 
-                const ticketNumber = ticket.querySelector('[data-test-id="ticket-number"]')?.textContent || 'неизвестен';
+                // Извлекаем номер билета из текста кнопки (новая структура)
+                const ticketText = ticket.textContent || '';
+                const ticketNumber = ticketText.match(/Билет №(\d+)/)?.[1] || 'неизвестен';
                 console.log('Выбираем билет:', ticketNumber);
                 ticket.click();
                 await new Promise(resolve => setTimeout(resolve, 1000));

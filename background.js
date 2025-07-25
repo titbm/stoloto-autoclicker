@@ -1,6 +1,6 @@
 chrome.action.onClicked.addListener(async (tab) => {
-    // URL рабочей страницы приложения
-    const workPageUrl = 'https://www.stoloto.ru/ruslotto/game?viewType=favorite';
+    // URL рабочей страницы приложения (обновлено для новой структуры сайта)
+    const workPageUrl = 'https://www.stoloto.ru/ruslotto/game?viewType=tickets';
     
     // Если текущая вкладка - рабочая страница приложения
     if (tab.url === workPageUrl) {

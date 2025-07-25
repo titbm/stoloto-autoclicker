@@ -20,7 +20,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.stoloto.ru/ruslotto/game?viewType=favorite"],
+      "matches": [
+        "https://www.stoloto.ru/ruslotto/game?viewType=tickets"
+      ],
       "js": [
         "modules/utils.js",
         "modules/state.js", 

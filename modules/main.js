@@ -23,14 +23,19 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
     
     window.stolotoUI.updateStatusBlock(numbers, excludeNumbers, mode);
     
-    // Функция ожидания появления кнопок с числами
+    // Функция ожидания появления кнопок с числами в модальном окне
     function waitForNumberButtons() {
         return new Promise((resolve) => {
             const checkButtons = () => {
-                const allButtons = document.querySelectorAll('button');
-                if (allButtons.length > 0) {
+                // Ищем именно кнопки с числами в модальном окне
+                const numberButtons = document.querySelectorAll('dialog button, [data-test-id="number-list"] button');
+                const hasNumberButtons = Array.from(numberButtons).some(btn => /^\d+$/.test(btn.textContent.trim()));
+                
+                if (hasNumberButtons) {
+                    console.log(`✅ Найдено ${numberButtons.length} кнопок в модальном окне`);
                     resolve();
                 } else {
+                    console.log('⏳ Ждем появления кнопок с числами в модальном окне...');
                     setTimeout(checkButtons, 500);
                 }
             };
@@ -38,35 +43,84 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
         });
     }
 
+    // Функция открытия модального окна выбора чисел
+    async function openModal() {
+        const chooseNumbersButton = Array.from(document.querySelectorAll('button')).find(btn => 
+            btn.textContent.trim() === 'Выбрать числа'
+        );
+        
+        if (chooseNumbersButton) {
+            console.log('Открываем модальное окно выбора чисел');
+            chooseNumbersButton.click();
+            // Увеличиваем время ожидания загрузки модального окна
+            console.log('Ждем 2 секунды для загрузки модального окна...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return true;
+        } else {
+            console.log('Кнопка "Выбрать числа" не найдена');
+            return false;
+        }
+    }
+
     // Сначала выбираем числа
     async function selectNumbers() {
         await waitForNumberButtons();
         
-        for (const num of numbers) {
+        console.log(`Начинаем выбор ${numbers.length} чисел:`, numbers);
+        
+        // Дополнительное ожидание для полной загрузки модального окна
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        for (let i = 0; i < numbers.length; i++) {
+            const num = numbers[i];
             if (!state.isSearching) return false;
 
-            const buttons = Array.from(document.querySelectorAll('button'));
-            const button = buttons.find(btn => {
+            console.log(`Ищем кнопку для числа ${num} (${i + 1} из ${numbers.length})`);
+            
+            // Ищем кнопки только в модальном окне с числами (более специфичный селектор)
+            const numberButtons = Array.from(document.querySelectorAll('dialog button, [data-test-id="number-list"] button'));
+            console.log(`Найдено ${numberButtons.length} кнопок с числами в модальном окне`);
+            
+            const button = numberButtons.find(btn => {
                 const text = btn.textContent.trim();
-                return text === num.toString();
+                return text === num.toString() && /^\d+$/.test(text);
             });
             
             if (button) {
-                console.log('Нажимаем на число:', num);
+                console.log(`✓ Найдена кнопка для числа: ${num}`);
                 button.click();
-                // Ждем случайное время от 250мс до 1000мс
-                const delay = Math.floor(Math.random() * (1000 - 250 + 1)) + 250;
-                console.log(`Ждем ${delay}мс перед следующим нажатием...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
+                
+                // Фиксированная задержка для стабильности
+                console.log(`Ждем 800мс для обработки клика...`);
+                await new Promise(resolve => setTimeout(resolve, 800));
+                
+                // Проверяем, что число действительно выбрано
+                const selectedButtons = Array.from(document.querySelectorAll('dialog button, [data-test-id="number-list"] button'))
+                    .filter(btn => btn.textContent.trim() === num.toString());
+                
+                if (selectedButtons.length > 0) {
+                    console.log(`✅ Число ${num} успешно выбрано`);
+                } else {
+                    console.log(`⚠️ Число ${num} может быть не выбрано, повторяем клик...`);
+                    button.click();
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
             } else {
-                console.log('Кнопка не найдена для числа:', num);
+                console.log(`✗ Кнопка НЕ найдена для числа: ${num}`);
+                console.log('Доступные кнопки с числами:', numberButtons
+                    .filter(btn => /^\d+$/.test(btn.textContent.trim()))
+                    .map(btn => btn.textContent.trim())
+                    .slice(0, 15) // Показываем больше для отладки
+                );
+                return false; // Прерываем выполнение, если число не найдено
             }
         }
 
+        console.log('Завершен выбор всех чисел. Проверяем статус поиска...');
         if (!state.isSearching) return false;
 
-        // Ждем перед нажатием "Показать билеты"
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Увеличиваем задержку перед нажатием "Показать билеты"
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         const showTicketsButton = Array.from(document.querySelectorAll('button')).find(btn => 
             btn.textContent.trim() === 'Показать билеты'
@@ -75,8 +129,8 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
         if (showTicketsButton) {
             console.log('Нажимаем кнопку "Показать билеты"');
             showTicketsButton.click();
-            // Ждем загрузки билетов
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Увеличиваем время ожидания загрузки билетов
+            await new Promise(resolve => setTimeout(resolve, 2000));
             return true;
         } else {
             console.log('Кнопка "Показать билеты" не найдена');
@@ -85,6 +139,13 @@ async function clickNumbers(numbers, mode, excludeNumbers = []) {
     }
 
     // Запускаем процесс
+    // Сначала открываем модальное окно
+    const modalOpened = await openModal();
+    if (!modalOpened || !state.isSearching) {
+        console.log('Не удалось открыть модальное окно или поиск был остановлен');
+        return;
+    }
+    
     const numbersSelected = await selectNumbers();
     if (numbersSelected && state.isSearching) {
         await window.stolotoSearch.findSuitableTicket(numbers);
@@ -121,6 +182,11 @@ function setupMessageListener() {
             state.purchaseSearchNumbers = request.numbers;
             state.purchaseExcludeNumbers = request.excludeNumbers || [];
             state.purchaseSearchMode = request.mode;
+            
+            // Сохраняем исключаемые числа для обычного режима
+            if (!state.isPurchaseMode) {
+                state.excludeNumbers = request.excludeNumbers || [];
+            }
             
             // Если режим покупки активен и это новый запуск, сбрасываем счетчики
             if (state.isPurchaseMode) {
@@ -194,19 +260,13 @@ function setupMessageListener() {
             return true;
             
         } else if (request.action === 'checkPageLoadState') {
-            // Проверяем состояние загрузки страницы
-            const isStolotoPage = window.location.hostname.includes('stoloto.ru');
-            const isReady = isStolotoPageReady();
-            
-            console.log('Проверка состояния загрузки страницы:', {
-                isStolotoPage,
-                isReady,
-                url: window.location.href
-            });
-            
+            // Проверяем только наличие кнопки "Выбрать числа" и сразу возвращаем результат
+            const selectNumbersButton = Array.from(document.querySelectorAll('button')).find(btn => 
+                btn.textContent.trim() === 'Выбрать числа'
+            );
             sendResponse({
-                isReady: isReady,
-                isStolotoPage: isStolotoPage
+                isReady: !!selectNumbersButton,
+                isStolotoPage: window.location.hostname.includes('stoloto.ru')
             });
             return true;
         }
