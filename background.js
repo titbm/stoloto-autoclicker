@@ -3,7 +3,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     const workPageUrl = 'https://www.stoloto.ru/ruslotto/game?viewType=tickets';
     
     // Если текущая вкладка - рабочая страница приложения
-    if (tab.url === workPageUrl) {
+    if (tab.url && tab.url.startsWith(workPageUrl)) {
         // Открываем popup
         await chrome.action.setPopup({ popup: 'popup.html' });
         // Имитируем повторный клик, чтобы открыть popup
