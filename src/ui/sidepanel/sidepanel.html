@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Столото Автокликер</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      margin: 0;
+    }
+    
+    h1 {
+      font-size: 18px;
+      margin: 0 0 16px 0;
+    }
+    
+    .field {
+      margin-bottom: 12px;
+    }
+    
+    label {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 4px;
+      color: #666;
+    }
+    
+    input, select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    
+    button:hover {
+      background: #45a049;
+    }
+    
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    
+    .stop-btn {
+      background: #f44336;
+    }
+    
+    .stop-btn:hover {
+      background: #da190b;
+    }
+    
+    .status {
+      margin-top: 16px;
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎰 Поиск билетов</h1>
+  
+  <!-- Статусы загрузки -->
+  <div id="loadingStatus" class="status">
+    <div id="pageLoadingMsg">⏳ Ждем полной загрузки страницы...</div>
+    <div id="authCheckMsg" class="hidden">🔐 Проверяем статус авторизации на сайте...</div>
+  </div>
+  
+  <!-- Форма поиска (скрыта до готовности) -->
+  <div id="searchForm" class="hidden">
+  <div class="field">
+    <label>Искать числа (через пробел или запятую)</label>
+    <input type="text" id="searchNumbers" placeholder="1 2 3 4 5">
+  </div>
+  
+  <div class="field">
+    <label>Исключить числа (через пробел или запятую)</label>
+    <input type="text" id="excludeNumbers" placeholder="10 20 30">
+  </div>
+  
+  <div class="field">
+    <label>Режим поиска</label>
+    <select id="searchMode">
+      <option value="anywhere">Числа где угодно</option>
+      <option value="same_half">Числа в одной половине</option>
+      <option value="same_row">Числа в одной строке</option>
+    </select>
+  </div>
+  
+  <div class="field">
+    <label>Купить билетов (0 = только поиск)</label>
+    <input type="number" id="ticketsToBuy" value="0" min="0">
+  </div>
+  
+  <div class="field">
+    <label>
+      <input type="checkbox" id="testMode" checked>
+      Тестовый режим (без реальной покупки)
+    </label>
+  </div>
+  
+  <button id="startBtn">Запустить поиск</button>
+  <button id="stopBtn" class="stop-btn hidden">Остановить</button>
+  
+  <div id="searchStatus" class="status hidden"></div>
+  <div id="lastSearchResult" class="status hidden"></div>
+  </div>
+  
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

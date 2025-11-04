@@ -1,0 +1,50 @@
+name: Build and Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Build ZIP
+        run: npm run build
+      
+      - name: Get version from manifest
+        id: version
+        run: echo "VERSION=$(node -p "require('./manifest.json').version")" >> $GITHUB_OUTPUT
+      
+      - name: Upload ZIP to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./build/stoloto-autoclicker-${{ steps.version.outputs.VERSION }}.zip
+          asset_name: stoloto-autoclicker-${{ steps.version.outputs.VERSION }}.zip
+          asset_content_type: application/zip
+      
+      - name: Update updates.xml
+        run: |
+          sed -i "s/version='[^']*'/version='${{ steps.version.outputs.VERSION }}'/" build/updates.xml
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build
+          publish_branch: gh-pages
+          keep_files: false

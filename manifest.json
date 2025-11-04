@@ -1,38 +1,58 @@
-﻿{  "manifest_version": 3,  "name": "Столото Автокликер",
-  "version": "1.2.2","description":"Автоматический поиск билетов с заданными числами на сайте Столото",
+{
+  "manifest_version": 3,
+  "name": "Столото Автокликер",
+  "version": "2.0.0",
+  "description": "Автоматический поиск билетов с заданными числами на сайте Столото",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvVi/eAgkdOe5vMUoFbbMvRAmyG8edhmJDpRZJL/WdscATjo7JSFctY7F57GtUIzyuPmvPSRlehq45KutUmgIiaGi8/qtP4OCjwam07RRUwLuifugc84SDX/yDamvCkZPRCMnr1Iy947Nji+XRkSvYEJpAF8DdQeyeRNxzo4XctBWdWYOZsgxo1FCHkHBDLD7lXGZAteuOeu0Ogfrw7iHR+KZAp6nttECNT8jLQesputi97n6Rkk3xpo5kjV67qLJTYqv2Rs9Fo4WkXQxFQWiudf/QLPz/MWZ1zRaBi5nO5B+E6Sue+3PFHhonlqkePiSRx3xVNaLLnAb2vHUljINpwIDAQAB",
   "author": "titbm",
-  "homepage_url": "https://github.com/titbm/stoloto-autoclicker",  "permissions": ["activeTab", "scripting", "storage", "tabs"],  "icons": {
+  "homepage_url": "https://github.com/titbm/stoloto-autoclicker",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://www.stoloto.ru/*"
+  ],
+  "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },  "action": {
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "32": "icons/icon32.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
   },
   "background": {
-    "service_worker": "background.js",
+    "service_worker": "src/background.js",
     "type": "module"
   },
   "content_scripts": [
     {
       "matches": [
-        "https://www.stoloto.ru/ruslotto/game?viewType=tickets"
+        "https://www.stoloto.ru/ruslotto/game*",
+        "https://www.stoloto.ru/auth/*"
       ],
       "js": [
-        "modules/utils.js",
-        "modules/state.js", 
-        "modules/ui.js",
-        "modules/auth.js",
-        "modules/payment.js", 
-        "modules/search.js",
-        "modules/main.js",
-        "content.js"
-      ]
+        "src/content-main.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.stoloto.ru/ruslotto/game*",
+        "https://www.stoloto.ru/auth/*"
+      ],
+      "js": [
+        "src/content.js"
+      ],
+      "run_at": "document_start"
     }
-  ]
+  ],
+  "action": {
+    "default_title": "Открыть панель поиска"
+  },
+  "side_panel": {
+    "default_path": "src/ui/sidepanel/sidepanel.html"
+  }
 }

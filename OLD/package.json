@@ -1,0 +1,10 @@
+{
+  "name": "stoloto-autoclicker",
+  "version": "1.2.2",
+  "scripts": {
+    "build": "node build/pack-extension.js"
+  },
+  "devDependencies": {
+    "archiver": "^7.0.1"
+  }
+}

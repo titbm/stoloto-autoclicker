@@ -59,7 +59,7 @@ async function checkActiveTabAuth() {
         return new Promise((resolve) => {
             chrome.tabs.sendMessage(
                 tabs[0].id,
-                { action: 'checkUserLogin' },
+                { action: 'checkAuth' },
                 (response) => {
                     // Если ошибка, считаем что не авторизован
                     if (chrome.runtime.lastError) {
@@ -69,7 +69,7 @@ async function checkActiveTabAuth() {
                     }
 
                     // Если получили ответ, берем статус из него
-                    if (response && response.isLoggedIn !== undefined) {
+                    if (response && response.success && response.isLoggedIn !== undefined) {
                         isUserAuthenticated = response.isLoggedIn;
                         console.log('Получен статус авторизации от страницы:', isUserAuthenticated);
 
@@ -397,7 +397,7 @@ async function checkUserBalance(ticketsToBuy) {
                     // Если пользователь авторизован, проверяем баланс
                     chrome.tabs.sendMessage(
                         tab.id,
-                        { action: 'checkUserBalance', ticketsToBuy: ticketsToBuy },
+                        { action: 'checkBalance', ticketsToBuy: ticketsToBuy },
                         (response) => {
                             if (chrome.runtime.lastError) {
                                 console.error('Ошибка при проверке баланса:', chrome.runtime.lastError);
@@ -405,7 +405,7 @@ async function checkUserBalance(ticketsToBuy) {
                                 return;
                             }
 
-                            if (response && response.balance !== undefined) {
+                            if (response && response.success && response.balance !== undefined) {
                                 console.log('Получен баланс:', response.balance, 'руб.');
                                 console.log('Требуется:', ticketsToBuy * TICKET_PRICE, 'руб.');
                                 resolve({
@@ -561,69 +561,20 @@ async function checkPageLoadState() {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         
         if (!tab || !tab.id) {
-            console.log('Не удалось найти активную вкладку для проверки состояния загрузки');
-            // Если нет активной вкладки, разрешаем использование кнопки но отмечаем что проверка не удалась
             return { isReady: true, isStolotoPage: false, checkFailed: true };
         }
 
-        // Дополнительная проверка URL для определения страницы Столото
-        const isStolotoUrl = tab.url && (tab.url.includes('stoloto.ru') || tab.url.includes('www.stoloto.ru'));
-        console.log('URL активной вкладки:', tab.url, 'Столото:', isStolotoUrl);
+        // Проверяем URL
+        const isStolotoUrl = tab.url && tab.url.includes('stoloto.ru');
+        console.log('Проверка страницы:', tab.url, 'Столото:', isStolotoUrl);
 
-        return new Promise((resolve) => {
-            chrome.tabs.sendMessage(
-                tab.id,
-                { action: 'checkPageLoadState' },
-                (response) => {
-                    if (chrome.runtime.lastError) {
-                        console.log('Ошибка при проверке состояния загрузки:', chrome.runtime.lastError.message);
-                        // Если content script не отвечает, но URL указывает на Столото
-                        // возможно страница еще загружается
-                        if (isStolotoUrl) {
-                            console.log('Content script не отвечает, но это страница Столото - возможно загружается');
-                            resolve({ isReady: false, isStolotoPage: true, checkFailed: false });
-                        } else {
-                            // Если это не Столото, разрешаем использование кнопки
-                            resolve({ isReady: true, isStolotoPage: false, checkFailed: true });
-                        }
-                        return;
-                    }
-
-                    if (response && response.isReady !== undefined) {
-                        console.log('Получено состояние загрузки страницы:', response);
-                        resolve({
-                            isReady: response.isReady,
-                            isStolotoPage: response.isStolotoPage,
-                            checkFailed: false
-                        });
-                    } else {
-                        console.log('Некорректный ответ при проверке состояния загрузки:', response);
-                        // Если ответ некорректный, но URL указывает на Столото
-                        if (isStolotoUrl) {
-                            console.log('Некорректный ответ, но это страница Столото - возможно загружается');
-                            resolve({ isReady: false, isStolotoPage: true, checkFailed: false });
-                        } else {
-                            resolve({ isReady: true, isStolotoPage: false, checkFailed: true });
-                        }
-                    }
-                }
-            );
-
-            // Устанавливаем таймаут на случай, если ответ не придет
-            setTimeout(() => {
-                console.log('Таймаут при проверке состояния загрузки');
-                // При таймауте, если URL указывает на Столото, считаем что страница загружается
-                if (isStolotoUrl) {
-                    console.log('Таймаут, но это страница Столото - возможно загружается');
-                    resolve({ isReady: false, isStolotoPage: true, checkFailed: false });
-                } else {
-                    resolve({ isReady: true, isStolotoPage: false, checkFailed: true });
-                }
-            }, 1000);
-        });
+        return {
+            isReady: true,
+            isStolotoPage: isStolotoUrl,
+            checkFailed: false
+        };
     } catch (error) {
-        console.error('Ошибка при проверке состояния загрузки страницы:', error);
-        // При ошибке разрешаем использование кнопки но отмечаем что проверка не удалась
+        console.error('Ошибка при проверке страницы:', error);
         return { isReady: true, isStolotoPage: false, checkFailed: true };
     }
 }
@@ -742,9 +693,10 @@ button.addEventListener('click', async () => {
             }
 
             const activeTab = tabs[0];
-            // Запускаем поиск
-            chrome.tabs.sendMessage(activeTab.id, {
-                action: 'clickNumbers',
+            // Запускаем поиск через background
+            chrome.runtime.sendMessage({
+                action: 'startSearch',
+                tabId: activeTab.id,
                 numbers: numbers,
                 excludeNumbers: filteredExcludeNumbers,
                 mode: searchMode.value,
@@ -760,7 +712,7 @@ button.addEventListener('click', async () => {
                     alert(response.message);
                     button.disabled = false;
                 } else {
-                    console.log('Начат поиск билета');
+                    console.log('✅ Поиск запущен через background');
                     isSearching = true;
                     button.textContent = 'Остановить';
                     button.classList.remove('start');
@@ -774,17 +726,21 @@ button.addEventListener('click', async () => {
             button.disabled = false;
         }
     } else {
-        // Останавливаем поиск
+        // Останавливаем поиск через background
         try {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
             button.disabled = true;
 
-            chrome.tabs.sendMessage(tab.id, { action: 'stopSearch' }, () => {
+            chrome.runtime.sendMessage({
+                action: 'stopSearch',
+                tabId: tab.id
+            }, (response) => {
                 isSearching = false;
                 button.textContent = 'Запустить';
                 button.classList.remove('stop');
                 button.classList.add('start');
                 button.disabled = false;
+                console.log('✅ Поиск остановлен');
             });
 
             // Установим таймаут на случай, если сообщение не дойдет
