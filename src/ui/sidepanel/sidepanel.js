@@ -5,10 +5,9 @@
 import { ChromeAdapter } from '../../adapters/ChromeAdapter.js';
 import { SearchCriteria } from '../../domain/SearchCriteria.js';
 import { MESSAGE_TYPES } from '../../shared/messaging.js';
-import { PRICES } from '../../shared/constants.js';
+import { PRICES, SEARCH_MODES } from '../../shared/constants.js';
 
 const TICKET_PRICE = PRICES.TICKET_PRICE;
-import { SEARCH_MODES } from '../../shared/constants.js';
 
 const chromeAdapter = new ChromeAdapter();
 
@@ -183,7 +182,7 @@ async function startSearch() {
     // Используем отфильтрованный список исключений
     excludeNumbers = duplicateCheck.filteredExcludeNumbers;
 
-    const mode = searchModeSelect.value;
+    const mode = searchModeSelect.value || SEARCH_MODES.ANYWHERE;
     const ticketsToBuy = parseInt(ticketsToBuyInput.value) || 0;
     
     console.log('📝 Параметры поиска:', { searchNumbers, excludeNumbers, mode, ticketsToBuy });
@@ -457,15 +456,15 @@ function validateNumbersByDecade(numbers, mode) {
   let modeName;
   
   switch (mode) {
-    case 'same_row':
+    case SEARCH_MODES.SAME_ROW:
       maxPerDecade = 1; // В одной строке не может быть больше 1 числа из десятка
       modeName = 'одной строке';
       break;
-    case 'same_half':
+    case SEARCH_MODES.SAME_HALF:
       maxPerDecade = 2; // В половине билета не может быть больше 2 чисел из десятка
       modeName = 'одной половине';
       break;
-    case 'anywhere':
+    case SEARCH_MODES.ANYWHERE:
       maxPerDecade = 4; // Во всем билете не может быть больше 4 чисел из десятка
       modeName = 'билете';
       break;

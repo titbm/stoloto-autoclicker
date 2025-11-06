@@ -18,7 +18,7 @@ const TIMEOUTS = {
   CLICK_DELAY: 500
 };
 
-const TICKET_PRICE = 100; // Цена одного билета
+const TICKET_PRICE = 150; // Цена одного билета Русское лото
 
 // Типы сообщений (копия из shared/messaging.js)
 const MESSAGE_TYPES = {

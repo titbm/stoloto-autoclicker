@@ -170,7 +170,6 @@ async function handleMessage(message, sender) {
       
       // Возвращаем tabId в sidepanel
       return { tabId: newTabId };
-      break;
 
     case MESSAGE_TYPES.START_SEARCH:
       await startSearch(data);

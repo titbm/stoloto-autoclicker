@@ -29,5 +29,5 @@ export const TIMEOUTS = {
 
 // Цены
 export const PRICES = {
-  TICKET_PRICE: 150          // Цена одного билета (руб)
+  TICKET_PRICE: 150          // Цена одного билета Русское лото (руб)
 };
