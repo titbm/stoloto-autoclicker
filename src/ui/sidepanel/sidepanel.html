@@ -25,7 +25,12 @@
       display: block;
       font-size: 12px;
       margin-bottom: 4px;
+      margin-top: 16px;
       color: #666;
+    }
+    
+    .field label {
+      margin-top: 0;
     }
     
     input, select {
@@ -66,12 +71,21 @@
       background: #da190b;
     }
     
+    .stop-btn:disabled {
+      background: #f44336;
+      opacity: 0.7;
+      cursor: wait;
+    }
+    
     .status {
-      margin-top: 16px;
+      margin-top: 4px;
+      margin-bottom: 8px;
       padding: 12px;
       background: #f5f5f5;
       border-radius: 4px;
       font-size: 12px;
+      white-space: pre-line;
+      line-height: 1.5;
     }
     
     .hidden {
@@ -86,6 +100,7 @@
   <div id="loadingStatus" class="status">
     <div id="pageLoadingMsg">⏳ Ждем полной загрузки страницы...</div>
     <div id="authCheckMsg" class="hidden">🔐 Проверяем статус авторизации на сайте...</div>
+    <div id="searchStageMsg" class="hidden">🔍 Получаем статус поиска...</div>
   </div>
   
   <!-- Форма поиска (скрыта до готовности) -->
@@ -124,8 +139,15 @@
   <button id="startBtn">Запустить поиск</button>
   <button id="stopBtn" class="stop-btn hidden">Остановить</button>
   
-  <div id="searchStatus" class="status hidden"></div>
-  <div id="lastSearchResult" class="status hidden"></div>
+  <div id="searchStatusContainer" class="hidden">
+    <label>Статус:</label>
+    <div id="searchStatus" class="status"></div>
+  </div>
+  
+  <div id="lastSearchResultContainer" class="hidden">
+    <label>Результат последнего поиска:</label>
+    <div id="lastSearchResult" class="status"></div>
+  </div>
   </div>
   
   <script type="module" src="sidepanel.js"></script>

@@ -84,12 +84,12 @@ async function handleMessage(message, sender) {
   const { type, data } = message;
 
   switch (type) {
-    case MESSAGE_TYPES.PAGE_READY:
-      // Content script готов
+    case MESSAGE_TYPES.CONTENT_SCRIPT_LOADED:
+      // Content script инициализирован
       const tabId = sender.tab?.id;
       if (tabId) {
         readyTabs.add(tabId);
-        console.log(`✅ Вкладка ${tabId} готова к работе`);
+        console.log(`✅ Content script загружен на вкладке ${tabId}`);
         
         // Проверяем есть ли активная сессия - если есть, значит PurchaseTickets сам перезагрузил
         const existingSession = activeSessions.get(tabId);
@@ -106,7 +106,12 @@ async function handleMessage(message, sender) {
             // Сохраняем результат с ошибкой
             const errorState = {
               status: 'error',
+              stoppedAt: new Date().toISOString(),
+              stoppedBy: 'error',
               ticketsChecked: 0,
+              ticketsFound: 0,
+              ticketsPurchased: 0,
+              errorMessage: 'Покупка прервана: страница была перезагружена вручную',
               message: 'Покупка прервана: страница была перезагружена вручную',
               tickets: [],
               criteria: purchaseState.criteria
@@ -130,6 +135,27 @@ async function handleMessage(message, sender) {
         }
       }
       break;
+    
+
+    case MESSAGE_TYPES.CHECK_PAGE_LOADED:
+      // Проверка загрузки страницы (от sidepanel)
+      console.log('📨 CHECK_PAGE_LOADED от sidepanel для вкладки:', data.tabId);
+      const checkResponse = await chromeAdapter.sendMessageToTab(
+        data.tabId,
+        MESSAGE_TYPES.CHECK_PAGE_LOADED,
+        {}
+      );
+      return checkResponse.data;
+    
+    case MESSAGE_TYPES.GET_USER_DATA:
+      // Получение данных пользователя (от sidepanel)
+      console.log('📨 GET_USER_DATA от sidepanel для вкладки:', data.tabId);
+      const userDataResponse = await chromeAdapter.sendMessageToTab(
+        data.tabId,
+        MESSAGE_TYPES.GET_USER_DATA,
+        {}
+      );
+      return userDataResponse.data;
 
     case MESSAGE_TYPES.SIDEPANEL_OPENED:
       // Sidepanel открылся - выполняем логику
@@ -141,6 +167,9 @@ async function handleMessage(message, sender) {
       ourTabs.add(newTabId);
       await saveOurTabs();
       console.log('📝 Вкладка добавлена в ourTabs:', newTabId, 'Всего наших:', ourTabs.size);
+      
+      // Возвращаем tabId в sidepanel
+      return { tabId: newTabId };
       break;
 
     case MESSAGE_TYPES.START_SEARCH:
@@ -151,12 +180,42 @@ async function handleMessage(message, sender) {
       stopSearch(data.tabId);
       break;
     
+    case MESSAGE_TYPES.SEARCH_STATUS:
+      // Сохраняем последний статус
+      await chromeAdapter.saveLocal('lastSearchStatus', message.data.status);
+      
+      // Пробрасываем статус в sidepanel
+      chrome.runtime.sendMessage({
+        type: MESSAGE_TYPES.SEARCH_STATUS,
+        data: message.data
+      }, () => {
+        if (chrome.runtime.lastError) {
+          console.log('⚠️ Sidepanel не открыт или не слушает');
+        }
+      });
+      return {};
+    
     case MESSAGE_TYPES.SEARCH_PROGRESS:
       // Обновляем состояние при прогрессе
       const currentState = searchStates.get(sender.tab?.id || data.tabId);
       if (currentState) {
         currentState.ticketsChecked = data.checked;
         searchStates.set(sender.tab?.id || data.tabId, currentState);
+        
+        // Сохраняем состояние после каждой страницы
+        await chromeAdapter.saveLocal('lastSearchState', currentState);
+        console.log('💾 Состояние поиска сохранено (проверено:', data.checked, ')');
+      }
+      break;
+    
+    case MESSAGE_TYPES.PURCHASE_PROGRESS:
+      // Обновляем количество купленных и найденных билетов
+      const purchaseState = searchStates.get(data.tabId);
+      if (purchaseState) {
+        purchaseState.ticketsPurchased = data.ticketsPurchased;
+        purchaseState.ticketsFound = data.ticketsFound;
+        searchStates.set(data.tabId, purchaseState);
+        console.log('💾 Состояние покупки обновлено (куплено:', data.ticketsPurchased, ', найдено:', data.ticketsFound, ')');
       }
       break;
 
@@ -219,15 +278,27 @@ async function executeSearch(tabId, criteria) {
   console.log('🎯 executeSearch начат для вкладки:', tabId);
   console.log('📝 Критерии:', criteria);
   
+  // Сохраняем и отправляем начальный статус
+  const initialStatus = '🔄 Запускаем поиск...';
+  await chromeAdapter.saveLocal('lastSearchStatus', initialStatus);
+  await chromeAdapter.sendMessage(MESSAGE_TYPES.SEARCH_STATUS, {
+    status: initialStatus
+  }).catch(() => {});
+  
   let skipCleanup = false;
   
   // Инициализируем состояние поиска
   searchStates.set(tabId, {
-    status: 'running',
+    status: 'running', // 'running' | 'completed' | 'stopped' | 'error'
+    stoppedAt: null, // Дата-время остановки
+    stoppedBy: null, // 'user' | 'success' | 'error'
     ticketsChecked: 0,
+    ticketsFound: 0,
+    ticketsPurchased: 0,
+    errorMessage: null,
     message: 'Поиск запущен...',
     tickets: [],
-    criteria: criteria // Сохраняем критерии
+    criteria: criteria
   });
   
   // Создаем session объект
@@ -270,31 +341,66 @@ async function executeSearch(tabId, criteria) {
     if (result.stopped) {
       // Поиск был остановлен пользователем
       console.log('⏸️ Поиск остановлен пользователем');
+      const currentState = searchStates.get(tabId) || {};
+      // Всегда берем из currentState, т.к. он обновляется через SEARCH_PROGRESS и PURCHASE_PROGRESS
+      const ticketsChecked = currentState.ticketsChecked || result.ticketsChecked || 0;
+      const ticketsPurchased = currentState.ticketsPurchased || result.ticketsPurchased || 0;
+      
       const stoppedState = {
         status: 'stopped',
-        ticketsChecked: result.ticketsChecked || 0,
-        message: 'Поиск остановлен пользователем',
+        stoppedAt: new Date().toISOString(),
+        stoppedBy: 'user',
+        ticketsChecked: ticketsChecked,
+        ticketsFound: 0,
+        ticketsPurchased: ticketsPurchased,
+        errorMessage: null,
+        message: `Поиск остановлен пользователем`,
         tickets: [],
         criteria: criteria
       };
       searchStates.set(tabId, stoppedState);
       await chromeAdapter.saveLocal('lastSearchState', stoppedState);
       
+      // Сохраняем последний статус
+      let statusMessage = `⏸️ Поиск остановлен. Проверено: ${ticketsChecked}`;
+      if (ticketsPurchased > 0) {
+        statusMessage += `, Куплено: ${ticketsPurchased}`;
+      }
+      await chromeAdapter.saveLocal('lastSearchStatus', statusMessage);
+      
+      // Отправляем статус остановки
+      await chromeAdapter.sendMessage(MESSAGE_TYPES.SEARCH_STATUS, {
+        status: statusMessage
+      }).catch(() => {});
+      
       chromeAdapter.sendMessage(MESSAGE_TYPES.SEARCH_STOPPED, {}).catch(() => {
         console.log('⚠️ Не удалось отправить SEARCH_STOPPED (sidepanel закрыт?)');
       });
     } else if (result.found) {
       // Найдены билеты
-      console.log('✅ Найдено билетов:', result.tickets.length);
+      console.log('✅ Найдено билетов:', result.tickets?.length || 0);
+      console.log('🛒 Куплено билетов:', result.ticketsPurchased || 0);
+      console.log('📊 Проверено билетов:', result.ticketsChecked || 0);
+      
+      const currentState = searchStates.get(tabId) || {};
       const completedState = {
         status: 'completed',
-        ticketsChecked: result.ticketsChecked || 0,
-        message: `Найдено билетов: ${result.tickets.length}`,
-        tickets: result.tickets,
+        stoppedAt: new Date().toISOString(),
+        stoppedBy: 'success',
+        ticketsChecked: result.ticketsChecked || currentState.ticketsChecked || 0,
+        ticketsFound: result.ticketsFound || currentState.ticketsFound || result.tickets?.length || 0,
+        ticketsPurchased: result.ticketsPurchased || currentState.ticketsPurchased || 0,
+        errorMessage: null,
+        message: `Поиск завершен успешно`,
+        tickets: result.tickets || [],
         criteria: criteria
       };
       searchStates.set(tabId, completedState);
       await chromeAdapter.saveLocal('lastSearchState', completedState);
+      
+      // Сохраняем последний статус
+      const statusMessage = `✅ Поиск завершен. Найдено: ${result.tickets?.length || 0}, Куплено: ${result.ticketsPurchased || 0}`;
+      await chromeAdapter.saveLocal('lastSearchStatus', statusMessage);
       
       chromeAdapter.sendMessage(MESSAGE_TYPES.TICKET_FOUND, { 
         tickets: result.tickets 
@@ -319,13 +425,21 @@ async function executeSearch(tabId, criteria) {
     const state = searchStates.get(tabId) || { ticketsChecked: 0 };
     const errorState = {
       status: 'error',
+      stoppedAt: new Date().toISOString(),
+      stoppedBy: 'error',
       ticketsChecked: error.ticketsChecked || state.ticketsChecked || 0,
+      ticketsFound: 0,
+      ticketsPurchased: 0,
+      errorMessage: error.message,
       message: error.message,
       tickets: [],
       criteria: criteria
     };
     searchStates.set(tabId, errorState);
     await chromeAdapter.saveLocal('lastSearchState', errorState);
+    
+    // Сохраняем последний статус
+    await chromeAdapter.saveLocal('lastSearchStatus', `❌ Ошибка: ${error.message}`);
     
     // Отправляем ошибку в sidepanel (игнорируем только если sidepanel закрыт)
     if (!error.message.includes('message channel closed') && 
@@ -359,7 +473,7 @@ async function executeSearch(tabId, criteria) {
 /**
  * Остановить поиск
  */
-function stopSearch(tabId) {
+async function stopSearch(tabId) {
   console.log('⏸️ stopSearch вызван для вкладки:', tabId);
   console.log('📋 Активные сессии:', Array.from(activeSessions.keys()));
   
@@ -372,6 +486,10 @@ function stopSearch(tabId) {
   } else {
     console.log('⚠️ Сессия не найдена для вкладки', tabId);
   }
+  
+  // Очищаем состояние покупки при остановке
+  await chromeAdapter.saveLocal('purchaseState', null);
+  console.log('🗑️ Состояние покупки очищено');
   
   // Отменяем запланированную перезагрузку если есть
   cancelScheduledReload(tabId);
@@ -449,7 +567,12 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, _tab) => {
       const state = searchStates.get(tabId) || { ticketsChecked: 0 };
       const errorState = {
         status: 'error',
+        stoppedAt: new Date().toISOString(),
+        stoppedBy: 'error',
         ticketsChecked: state.ticketsChecked,
+        ticketsFound: 0,
+        ticketsPurchased: 0,
+        errorMessage: 'Поиск прерван: пользователь покинул страницу',
         message: 'Поиск прерван: пользователь покинул страницу',
         tickets: [],
         criteria: session.criteria

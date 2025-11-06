@@ -21,17 +21,21 @@ export const MESSAGE_TYPES = {
   SELECT_NUMBERS: 'select_numbers',
   APPLY_FILTER: 'apply_filter',
   CLEAR_FILTER: 'clear_filter',
-  CHECK_PAGE_READY: 'check_page_ready',
+  CHECK_PAGE_LOADED: 'check_page_loaded',
   RELOAD_PAGE: 'reload_page',
   CHECK_PAYMENT_BUTTONS: 'check_payment_buttons',
   CLICK_PAYMENT_BUTTON: 'click_payment_button',
 
   // Ответы от content к background
-  PAGE_READY: 'PAGE_READY',
+  CONTENT_SCRIPT_LOADED: 'CONTENT_SCRIPT_LOADED',
+  
+  // Прогресс покупки
+  PURCHASE_PROGRESS: 'purchase_progress',
+  USER_DATA_UPDATED: 'USER_DATA_UPDATED',
   TICKETS_DATA: 'tickets_data',
-  PAGE_LOADED: 'page_loaded',
 
   // Уведомления
+  SEARCH_STATUS: 'search_status',
   SEARCH_PROGRESS: 'search_progress',
   TICKET_FOUND: 'ticket_found',
   SEARCH_STOPPED: 'search_stopped',

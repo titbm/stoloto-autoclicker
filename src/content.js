@@ -18,6 +18,8 @@ const TIMEOUTS = {
   CLICK_DELAY: 500
 };
 
+const TICKET_PRICE = 100; // Цена одного билета
+
 // Типы сообщений (копия из shared/messaging.js)
 const MESSAGE_TYPES = {
   GET_TICKETS: 'get_tickets',
@@ -29,7 +31,7 @@ const MESSAGE_TYPES = {
   SELECT_NUMBERS: 'select_numbers',
   APPLY_FILTER: 'apply_filter',
   CLEAR_FILTER: 'clear_filter',
-  CHECK_PAGE_READY: 'check_page_ready',
+  CHECK_PAGE_LOADED: 'check_page_loaded',
   RELOAD_PAGE: 'reload_page',
   CHECK_PAYMENT_BUTTONS: 'check_payment_buttons',
   CLICK_PAYMENT_BUTTON: 'click_payment_button'
@@ -77,9 +79,8 @@ function extractNumbers(ticketElement) {
 function getUserData() {
   const isAuthorized = checkAuthorization();
   const balance = getBalance();
-  const ticketPrice = 100; // Временно
 
-  return { isAuthorized, balance, ticketPrice };
+  return { isAuthorized, balance };
 }
 
 function checkAuthorization() {
@@ -115,8 +116,15 @@ function getBalance() {
     }
   }
   
-  console.log('⚠️ Баланс не найден');
+  console.log('⚠️ Баланс не найден (возможно еще не загрузился)');
   return 0;
+}
+
+function getUserDataAsync() {
+  const isAuthorized = checkAuthorization();
+  const balance = getBalance();
+  
+  return { isAuthorized, balance };
 }
 
 function clickTicket(ticketId) {
@@ -151,14 +159,46 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// === Работа с фильтром ===
+// === Проверка состояния страницы ===
 
-function checkPageReady() {
-  // Проверяем есть ли кнопка "Выбрать числа"
-  const btn = Array.from(document.querySelectorAll('button'))
-    .find(btn => btn.textContent.trim() === 'Выбрать числа');
+// Флаг загрузки страницы
+let pageFullyLoaded = false;
+
+// Слушаем событие полной загрузки страницы
+window.addEventListener('load', () => {
+  console.log('🎉 window.onload - страница полностью загружена');
+  pageFullyLoaded = true;
   
-  return { ready: !!btn };
+  // Отправляем данные пользователя в background
+  sendUserDataToBackground();
+});
+
+// Отправляем данные пользователя в background
+function sendUserDataToBackground() {
+  const userData = getUserData();
+  console.log('📤 Отправляем данные пользователя в background:', userData);
+  
+  chrome.runtime.sendMessage({
+    type: 'USER_DATA_UPDATED',
+    data: userData
+  });
+}
+
+function checkPageLoaded() {
+  // 1. Проверяем что window.onload сработал
+  if (!pageFullyLoaded) {
+    return { loaded: false };
+  }
+  
+  // 2. Проверяем что React отрендерил контент
+  const ticketButtons = Array.from(document.querySelectorAll('button'))
+    .filter(btn => btn.textContent.includes('Билет №'));
+  
+  if (ticketButtons.length === 0) {
+    return { loaded: false };
+  }
+  
+  return { loaded: true };
 }
 
 async function reloadPage() {
@@ -267,7 +307,7 @@ async function handleMessage(message) {
       return getTickets();
 
     case MESSAGE_TYPES.GET_USER_DATA:
-      return getUserData();
+      return getUserDataAsync();
 
     case MESSAGE_TYPES.CLICK_TICKET:
       clickTicket(data.ticketId);
@@ -292,8 +332,8 @@ async function handleMessage(message) {
     case MESSAGE_TYPES.CLEAR_FILTER:
       return await clearFilter();
 
-    case MESSAGE_TYPES.CHECK_PAGE_READY:
-      return checkPageReady();
+    case MESSAGE_TYPES.CHECK_PAGE_LOADED:
+      return checkPageLoaded();
 
     case MESSAGE_TYPES.RELOAD_PAGE:
       return await reloadPage();
@@ -302,7 +342,7 @@ async function handleMessage(message) {
       return checkPaymentButtons();
 
     case MESSAGE_TYPES.CLICK_PAYMENT_BUTTON:
-      return await clickPaymentButton();
+      return await clickPaymentButton(data.testMode);
 
     default:
       throw new Error(`Неизвестный тип сообщения: ${type}`);
@@ -314,79 +354,95 @@ async function handleMessage(message) {
 function checkPaymentButtons() {
   const allButtons = Array.from(document.querySelectorAll('button'));
   
-  // Ищем кнопку "Оплатить кошельком" (широкий экран)
+  // Сначала проверяем есть ли кнопка "Оплатить кошельком" (desktop режим)
   const walletButton = allButtons.find(btn => 
-    btn.textContent.trim().includes('Оплатить кошельком')
-  );
-  
-  // Ищем кнопку "Оплатить N билетов" (узкий экран)
-  const payTicketsButton = allButtons.find(btn => 
-    btn.textContent.trim().match(/Оплатить \d+ билет/)
-  );
-  
-  // Ищем кнопку с QR кодом
-  const qrButton = allButtons.find(btn => 
-    btn.textContent.trim().includes('QR') || 
-    btn.textContent.trim().includes('СБП')
-  );
-  
-  return {
-    walletPaymentAvailable: !!(walletButton || payTicketsButton),
-    qrPaymentAvailable: !!qrButton
-  };
-}
-
-async function clickPaymentButton() {
-  let allButtons = Array.from(document.querySelectorAll('button'));
-  
-  // Сначала ищем кнопку "Оплатить кошельком" (широкий экран)
-  let walletButton = allButtons.find(btn => 
-    btn.textContent.trim().includes('Оплатить кошельком')
+    btn.textContent.includes('Оплатить кошельком')
   );
   
   if (walletButton) {
-    console.log('💳 Нажимаем кнопку "Оплатить кошельком" (широкий экран)');
+    console.log('✅ Найдена кнопка "Оплатить кошельком" (desktop режим)');
+    return {
+      walletPaymentAvailable: true,
+      qrPaymentAvailable: false
+    };
+  }
+  
+  // Если нет - ищем кнопку "Оплатить N билет(ов)" (планшет/мобильный режим)
+  const payButton = allButtons.find(btn => 
+    btn.textContent.includes('Оплатить') && btn.textContent.includes('билет')
+  );
+  
+  if (payButton) {
+    console.log('✅ Найдена кнопка "Оплатить..." (планшет/мобильный режим)');
+  }
+  
+  return {
+    walletPaymentAvailable: !!payButton,
+    qrPaymentAvailable: false
+  };
+}
+
+async function clickPaymentButton(testMode = false) {
+  const allButtons = Array.from(document.querySelectorAll('button'));
+  
+  // Сначала проверяем есть ли кнопка "Оплатить кошельком" (desktop режим)
+  let walletButton = allButtons.find(btn => 
+    btn.textContent.includes('Оплатить кошельком')
+  );
+  
+  if (walletButton) {
+    if (testMode) {
+      console.log('🧪 ТЕСТОВЫЙ РЕЖИМ: кнопка "Оплатить кошельком" найдена (desktop), финальный клик НЕ выполняется');
+      return { clicked: false, testMode: true };
+    }
+    
+    console.log('💳 Нажимаем кнопку "Оплатить кошельком" (desktop режим)');
     walletButton.click();
     console.log('✅ Кнопка нажата');
     return { clicked: true };
   }
   
-  // Если не нашли - ищем кнопку "Оплатить N билетов" (узкий экран)
-  const payTicketsButton = allButtons.find(btn => 
-    btn.textContent.trim().match(/Оплатить \d+ билет/)
+  // Если нет - ищем кнопку "Оплатить N билет(ов)" (планшет/мобильный режим)
+  const payButton = allButtons.find(btn => 
+    btn.textContent.includes('Оплатить') && btn.textContent.includes('билет')
   );
   
-  if (!payTicketsButton) {
+  if (!payButton) {
     throw new Error('Кнопка оплаты не найдена');
   }
   
-  console.log('💳 Нажимаем кнопку "Оплатить N билетов" (узкий экран)');
-  payTicketsButton.click();
+  console.log('💳 Нажимаем кнопку "Оплатить..." для открытия модального окна');
+  payButton.click();
+  console.log('✅ Кнопка нажата, ждем появления модального окна...');
   
-  // Ждём появления модалки
-  console.log('⏳ Ждём появления модалки с кнопкой оплаты...');
-  await wait(1000);
+  // Ждем появления модального окна с кнопкой "Оплатить кошельком"
+  await new Promise(resolve => setTimeout(resolve, 500));
   
-  // Ищем кнопку "Оплатить кошельком" в модалке
-  allButtons = Array.from(document.querySelectorAll('button'));
-  walletButton = allButtons.find(btn => 
-    btn.textContent.trim().includes('Оплатить кошельком')
+  // Ищем кнопку "Оплатить кошельком" в модальном окне
+  const allButtonsAfter = Array.from(document.querySelectorAll('button'));
+  walletButton = allButtonsAfter.find(btn => 
+    btn.textContent.includes('Оплатить кошельком')
   );
   
   if (!walletButton) {
-    throw new Error('Кнопка "Оплатить кошельком" не найдена в модалке');
+    throw new Error('Кнопка "Оплатить кошельком" не найдена в модальном окне');
   }
   
-  console.log('💳 Нажимаем кнопку "Оплатить кошельком" в модалке');
-  walletButton.click();
+  if (testMode) {
+    console.log('🧪 ТЕСТОВЫЙ РЕЖИМ: кнопка "Оплатить кошельком" найдена в модальном окне, финальный клик НЕ выполняется');
+    return { clicked: false, testMode: true };
+  }
   
+  console.log('💳 Нажимаем кнопку "Оплатить кошельком" в модальном окне');
+  walletButton.click();
   console.log('✅ Кнопка нажата');
+  
   return { clicked: true };
 }
 
-// Уведомляем background что страница готова
+// Уведомляем background что content script инициализирован
 chrome.runtime.sendMessage({ 
-  type: 'PAGE_READY',
+  type: 'CONTENT_SCRIPT_LOADED',
   data: { url: window.location.href }
 });
 

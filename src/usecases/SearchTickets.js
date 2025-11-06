@@ -13,7 +13,14 @@ export class SearchTickets {
     this.session = session;
   }
 
-  async execute(criteria, maxTickets = null, reloadDelay = 0) {
+  async sendStatus(status) {
+    await this.chromeAdapter.saveLocal('lastSearchStatus', status);
+    await this.chromeAdapter.sendMessage(MESSAGE_TYPES.SEARCH_STATUS, {
+      status: status
+    }).catch(() => {});
+  }
+
+  async execute(criteria, maxTickets = null, reloadDelay = 0, initialTicketsChecked = 0) {
     console.log('🎯 SearchTickets.execute начат');
     console.log('📝 Критерии:', criteria);
     console.log('📋 TabId:', this.tabId);
@@ -24,48 +31,65 @@ export class SearchTickets {
       console.log(`⏱️ Задержка перед перезагрузкой: ${reloadDelay}ms`);
     }
     
-    this.ticketsChecked = 0;
+    this.ticketsChecked = initialTicketsChecked; // Начинаем с переданного значения
     this.maxTickets = maxTickets;
     
     // Ждём перед перезагрузкой если указана задержка
     if (reloadDelay > 0) {
       console.log(`⏳ Ждём ${reloadDelay}ms перед перезагрузкой...`);
       await new Promise(resolve => setTimeout(resolve, reloadDelay));
+      
+      // Проверяем не остановлен ли поиск во время ожидания
+      if (!this.session.isRunning) {
+        console.log('⏸️ Поиск остановлен во время ожидания перезагрузки');
+        return {
+          found: false,
+          stopped: true,
+          tickets: [],
+          ticketsChecked: this.ticketsChecked
+        };
+      }
     }
     
     // Перезагружаем страницу в начале поиска
     console.log('🔄 Перезагружаем страницу перед началом поиска');
+    await this.sendStatus('🔄 Перезагружаем страницу...');
+    
     await this.chromeAdapter.sendMessageToTab(
       this.tabId,
       MESSAGE_TYPES.RELOAD_PAGE,
       {}
     ).catch(() => {});
     
-    // Ждем пока страница станет готова
-    console.log('⏳ Ждем готовности страницы...');
+    // Ждем пока страница загрузится
+    console.log('⏳ Ждем загрузки страницы...');
+    await this.sendStatus('⏳ Ждем загрузки страницы...');
+    
     await new Promise(resolve => {
-      const checkReady = async () => {
+      const checkLoaded = async () => {
         try {
           const response = await this.chromeAdapter.sendMessageToTab(
             this.tabId,
-            MESSAGE_TYPES.CHECK_PAGE_READY,
+            MESSAGE_TYPES.CHECK_PAGE_LOADED,
             {}
           );
-          if (response?.data?.ready) {
-            console.log('✅ Страница готова');
+          if (response?.data?.loaded) {
+            console.log('✅ Страница загружена');
             resolve();
           } else {
-            setTimeout(checkReady, 500);
+            setTimeout(checkLoaded, 500);
           }
         } catch (e) {
-          setTimeout(checkReady, 500);
+          setTimeout(checkLoaded, 500);
         }
       };
-      setTimeout(checkReady, 2000);
+      setTimeout(checkLoaded, 2000);
     });
     
     // Открыть модальное окно фильтра
     console.log('🔍 Открываем модальное окно фильтра');
+    await this.sendStatus('🔍 Открываем фильтр...');
+    
     const modalResponse = await this.chromeAdapter.sendMessageToTab(
       this.tabId,
       MESSAGE_TYPES.OPEN_FILTER_MODAL,
@@ -76,6 +100,8 @@ export class SearchTickets {
     // Выбрать числа в фильтре (максимум 7)
     const numbersForFilter = criteria.searchNumbers.slice(0, 7);
     console.log('🔍 Выбираем числа для фильтра (макс 7):', numbersForFilter);
+    await this.sendStatus(`🔢 Вводим числа: ${numbersForFilter.join(', ')}...`);
+    
     if (criteria.searchNumbers.length > 7) {
       console.log('📝 Полный список для проверки билетов:', criteria.searchNumbers);
     }
@@ -89,12 +115,17 @@ export class SearchTickets {
     
     // Применить фильтр
     console.log('🔍 Применяем фильтр');
+    await this.sendStatus('🔍 Применяем фильтр...');
+    
     const applyResponse = await this.chromeAdapter.sendMessageToTab(
       this.tabId,
       MESSAGE_TYPES.APPLY_FILTER,
       {}
     );
     console.log('📥 Ответ от APPLY_FILTER:', applyResponse);
+    
+    // Начинаем поиск
+    await this.sendStatus('🔍 Ищем подходящие билеты. Проверено: 0');
     
     // Ищем подходящие билеты
     console.log('🔄 Начинаем цикл поиска билетов');
@@ -119,25 +150,45 @@ export class SearchTickets {
       
       const ticketsData = response.data;
       console.log(`📊 Получено билетов: ${ticketsData.length}`);
-      this.ticketsChecked += ticketsData.length;
       
       const tickets = ticketsData.map(t => new Ticket(t.ticketId, t.numbers));
       
-      const matchingTickets = tickets.filter(ticket => 
-        this.matchesCriteria(ticket, criteria)
-      );
+      const matchingTickets = [];
+      for (const ticket of tickets) {
+        this.ticketsChecked++; // Считаем каждый проверенный билет
+        
+        // Отправляем прогресс сразу после проверки каждого билета
+        await this.chromeAdapter.sendMessage(MESSAGE_TYPES.SEARCH_PROGRESS, {
+          checked: this.ticketsChecked
+        }).catch(() => {});
+        
+        if (this.matchesCriteria(ticket, criteria)) {
+          matchingTickets.push(ticket);
+        }
+      }
       
       if (matchingTickets.length > 0) {
-        console.log('✅ Найдено билетов:', matchingTickets.length);
+        console.log('✅ Найдено подходящих билетов:', matchingTickets.length);
         
         const ticketsToClick = this.maxTickets 
           ? matchingTickets.slice(0, this.maxTickets)
           : matchingTickets;
         
-        console.log(`🖱️ Кликаем на ${ticketsToClick.length} билетов`);
+        console.log(`🖱️ Кликаем на ${ticketsToClick.length} из ${matchingTickets.length} найденных`);
         
-        for (const ticket of ticketsToClick) {
+        // Показываем что нашли билеты
+        const ticketWord = ticketsToClick.length === 1 ? 'билет' : 
+                          ticketsToClick.length < 5 ? 'билета' : 'билетов';
+        await this.sendStatus(`✅ Нашел ${ticketsToClick.length} ${ticketWord}`);
+        
+        // Кликаем по билетам
+        for (let i = 0; i < ticketsToClick.length; i++) {
+          const ticket = ticketsToClick[i];
           if (!this.session.isRunning) break;
+          
+          const current = i + 1;
+          
+          await this.sendStatus(`✅ Нашел ${ticketsToClick.length} ${ticketWord}. Добавляю ${current} билет...`);
           
           await this.chromeAdapter.sendMessageToTab(
             this.tabId,
@@ -147,10 +198,24 @@ export class SearchTickets {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
-        console.log('⏳ Ждём появления панели оплаты...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Если это покупка (maxTickets > 0) - ждем панель оплаты
+        if (this.maxTickets && this.maxTickets > 0) {
+          console.log('⏳ Ждём появления панели оплаты...');
+          await this.sendStatus('⏳ Ждём появления панели оплаты...');
+          
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+          // Обычный поиск - завершаем сразу
+          await this.sendStatus(`✅ Поиск окончен. Найдено билетов: ${ticketsToClick.length}`);
+        }
         
-        return { found: true, tickets: ticketsToClick, stopped: false, ticketsChecked: this.ticketsChecked };
+        return { 
+          found: true, 
+          tickets: ticketsToClick, 
+          totalMatchingTickets: matchingTickets.length, // Всего найдено подходящих
+          stopped: false, 
+          ticketsChecked: this.ticketsChecked 
+        };
       }
       
       console.log('❌ Подходящих билетов на этой странице не найдено');

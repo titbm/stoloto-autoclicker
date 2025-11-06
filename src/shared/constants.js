@@ -26,3 +26,8 @@ export const TIMEOUTS = {
   PAGE_LOAD: 2000,           // Ожидание загрузки страницы
   CLICK_DELAY: 500           // Задержка между кликами
 };
+
+// Цены
+export const PRICES = {
+  TICKET_PRICE: 150          // Цена одного билета (руб)
+};

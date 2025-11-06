@@ -5,6 +5,9 @@
 import { ChromeAdapter } from '../../adapters/ChromeAdapter.js';
 import { SearchCriteria } from '../../domain/SearchCriteria.js';
 import { MESSAGE_TYPES } from '../../shared/messaging.js';
+import { PRICES } from '../../shared/constants.js';
+
+const TICKET_PRICE = PRICES.TICKET_PRICE;
 import { SEARCH_MODES } from '../../shared/constants.js';
 
 const chromeAdapter = new ChromeAdapter();
@@ -13,6 +16,7 @@ const chromeAdapter = new ChromeAdapter();
 const loadingStatus = document.getElementById('loadingStatus');
 const pageLoadingMsg = document.getElementById('pageLoadingMsg');
 const authCheckMsg = document.getElementById('authCheckMsg');
+const searchStageMsg = document.getElementById('searchStageMsg');
 
 // Элементы UI - форма
 const searchForm = document.getElementById('searchForm');
@@ -23,14 +27,15 @@ const ticketsToBuyInput = document.getElementById('ticketsToBuy');
 const testModeCheckbox = document.getElementById('testMode');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
+const searchStatusContainer = document.getElementById('searchStatusContainer');
 const searchStatus = document.getElementById('searchStatus');
+const lastSearchResultContainer = document.getElementById('lastSearchResultContainer');
 const lastSearchResult = document.getElementById('lastSearchResult');
 
 // Состояние
 let isSearching = false;
 let currentTabId = null;
 let userBalance = 0;
-const TICKET_PRICE = 150; // Цена одного билета
 
 // Обработчики
 startBtn.addEventListener('click', startSearch);
@@ -65,29 +70,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('📨 Sidepanel получил сообщение:', type, data);
   
   switch (type) {
+    case MESSAGE_TYPES.SEARCH_STATUS:
+      showStatus(data.status);
+      break;
+    
     case MESSAGE_TYPES.TICKET_FOUND:
-      showStatus(`✅ Найдено билетов: ${data.tickets.length}`);
-      showLastResult(`✅ Найдено билетов: ${data.tickets.length}`);
+      // Статус уже установлен из SearchTickets, запрашиваем полное состояние
       stopSearchUI();
+      setTimeout(async () => {
+        if (currentTabId) {
+          const response = await chromeAdapter.sendMessage(MESSAGE_TYPES.CHECK_SEARCH_STATUS, {
+            tabId: currentTabId
+          });
+          if (response?.searchState) {
+            showLastSearchResult(response.searchState);
+          }
+        }
+      }, 100);
       break;
       
     case MESSAGE_TYPES.SEARCH_PROGRESS:
-      showStatus(`🔍 Проверено билетов: ${data.checked}`);
+      showStatus(`🔍 Ищем подходящие билеты. Проверено: ${data.checked}`);
       break;
       
     case MESSAGE_TYPES.SEARCH_STOPPED:
-      showStatus('⏸️ Поиск остановлен');
+      // Статус уже установлен из background через SEARCH_STATUS
       stopSearchUI();
       // Запрашиваем состояние чтобы показать результат
       setTimeout(async () => {
-        const tabs = await chrome.tabs.query({ url: 'https://www.stoloto.ru/ruslotto/game*' });
-        if (tabs.length > 0) {
+        if (currentTabId) {
           const response = await chromeAdapter.sendMessage(MESSAGE_TYPES.CHECK_SEARCH_STATUS, {
-            tabId: tabs[0].id
+            tabId: currentTabId
           });
           if (response?.searchState) {
-            const state = response.searchState;
-            showLastResult(`⏸️ ${state.message} (проверено: ${state.ticketsChecked})`);
+            showLastSearchResult(response.searchState);
           }
         }
       }, 100);
@@ -96,8 +112,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case MESSAGE_TYPES.ERROR:
       console.log('❌ Обрабатываем ERROR в sidepanel');
       showStatus(`❌ Ошибка: ${data.error}`);
-      showLastResult(`❌ Ошибка: ${data.error}`);
       stopSearchUI();
+      // Запрашиваем полное состояние для отображения
+      setTimeout(async () => {
+        if (currentTabId) {
+          const response = await chromeAdapter.sendMessage(MESSAGE_TYPES.CHECK_SEARCH_STATUS, {
+            tabId: currentTabId
+          });
+          if (response?.searchState) {
+            showLastSearchResult(response.searchState);
+          }
+        }
+      }, 100);
       break;
       
     case MESSAGE_TYPES.OUR_TAB_CLOSED:
@@ -131,7 +157,6 @@ async function startSearch() {
   // Защита от повторного запуска
   if (isSearching) {
     console.log('⚠️ Поиск уже запущен, игнорируем');
-    showStatus('⚠️ Поиск уже запущен');
     return;
   }
   
@@ -194,15 +219,11 @@ async function startSearch() {
     
     console.log('✅ Критерии созданы:', criteria);
     
-    // Получаем активную вкладку
-    const tab = await chromeAdapter.getActiveTab();
-    currentTabId = tab.id;
-    
-    console.log('📋 Активная вкладка:', currentTabId);
+    console.log('📋 Используем вкладку:', currentTabId);
     
     // Обновляем UI сразу
     startSearchUI();
-    showStatus('🔍 Поиск запущен...');
+    // Статус придет от background
     
     console.log('📤 Отправляем START_SEARCH в background');
     
@@ -227,21 +248,22 @@ async function startSearch() {
 async function stopSearch() {
   console.log('⏸️ stopSearch вызван, currentTabId:', currentTabId);
   
-  // Получаем вкладку Столото (не sidepanel)
-  const tabs = await chrome.tabs.query({ url: 'https://www.stoloto.ru/ruslotto/game*' });
-  const stolotoTab = tabs[0];
-  
-  if (stolotoTab) {
-    console.log('📋 Отправляем STOP_SEARCH для вкладки:', stolotoTab.id);
-    await chromeAdapter.sendMessage(MESSAGE_TYPES.STOP_SEARCH, {
-      tabId: stolotoTab.id
-    });
-    // Статус обновится когда придет SEARCH_STOPPED от background
-  } else {
-    console.log('⚠️ Вкладка Столото не найдена');
+  if (!currentTabId) {
+    console.log('⚠️ currentTabId не установлен');
     stopSearchUI();
-    showStatus('⚠️ Вкладка не найдена');
+    return;
   }
+  
+  // Показываем промежуточное состояние
+  stopBtn.textContent = '⏳ Останавливаем поиск...';
+  stopBtn.disabled = true;
+  showStatus('⏳ Останавливаем поиск...');
+  
+  console.log('📋 Отправляем STOP_SEARCH для вкладки:', currentTabId);
+  await chromeAdapter.sendMessage(MESSAGE_TYPES.STOP_SEARCH, {
+    tabId: currentTabId
+  });
+  // Статус обновится когда придет SEARCH_STOPPED от background
 }
 
 /**
@@ -471,7 +493,7 @@ function validateNumbersByDecade(numbers, mode) {
 function showStatus(text) {
   console.log('📊 Обновление статуса:', text);
   searchStatus.textContent = text;
-  searchStatus.classList.remove('hidden');
+  searchStatusContainer.classList.remove('hidden');
 }
 
 /**
@@ -479,14 +501,8 @@ function showStatus(text) {
  */
 function showLastResult(text) {
   console.log('📊 Результат последнего поиска:', text);
-  console.log('📊 lastSearchResult элемент:', lastSearchResult);
-  if (!lastSearchResult) {
-    console.error('❌ lastSearchResult элемент не найден!');
-    return;
-  }
   lastSearchResult.textContent = text;
-  lastSearchResult.classList.remove('hidden');
-  console.log('✅ Результат показан, classList:', lastSearchResult.classList);
+  lastSearchResultContainer.classList.remove('hidden');
 }
 
 
@@ -498,6 +514,8 @@ function startSearchUI() {
   isSearching = true;
   startBtn.classList.add('hidden');
   stopBtn.classList.remove('hidden');
+  stopBtn.textContent = '⏸️ Остановить'; // Сбрасываем текст кнопки
+  stopBtn.disabled = false; // Разблокируем кнопку
   searchNumbersInput.disabled = true;
   excludeNumbersInput.disabled = true;
   searchModeSelect.disabled = true;
@@ -519,101 +537,170 @@ function stopSearchUI() {
 
 // Инициализация при загрузке
 async function init() {
-  // 1. Уведомляем background что sidepanel открылся
-  await chromeAdapter.sendMessage(MESSAGE_TYPES.SIDEPANEL_OPENED, {});
+  // 1. Уведомляем background что sidepanel открылся и получаем tabId
+  const response = await chromeAdapter.sendMessage(MESSAGE_TYPES.SIDEPANEL_OPENED, {});
+  if (response?.tabId) {
+    currentTabId = response.tabId;
+    console.log('📋 Получен tabId от background:', currentTabId);
+  }
   
-  // 2. Проверяем есть ли активный поиск
-  await checkActiveSearch();
-  
-  // 3. Ждем готовности страницы
+  // 2. Ждем готовности страницы
   await waitForPageReady();
   
-  // 4. Проверяем авторизацию
+  // 3. Проверяем авторизацию
   await checkAuthorization();
   
-  // 5. Показываем форму
-  showSearchForm();
+  // 4. Проверяем этап поиска и получаем статусы
+  const statuses = await checkSearchStage();
+  
+  // 5. Показываем форму со статусами
+  showSearchForm(statuses);
 }
 
-// Проверяем есть ли активный поиск
-async function checkActiveSearch() {
+// Проверяем этап поиска
+async function checkSearchStage() {
+  searchStageMsg.classList.remove('hidden');
+  searchStageMsg.textContent = '🔍 Получаем статус поиска...';
+  
   try {
-    const tabs = await chrome.tabs.query({ url: 'https://www.stoloto.ru/ruslotto/game*' });
+    // Загружаем оба статуса из storage
+    const lastStatus = await chromeAdapter.getLocal('lastSearchStatus');
+    const lastState = await chromeAdapter.getLocal('lastSearchState');
     
-    if (tabs.length === 0) {
-      // Вкладки нет, но показываем последний результат из storage
-      const lastState = await chromeAdapter.getLocal('lastSearchState');
+    console.log('📦 Загружено из storage:', { lastStatus, lastState });
+    
+    let resultToShow = null;
+    let statusToShow = null;
+    
+    if (!currentTabId) {
+      // Вкладки нет - используем данные из storage
       if (lastState) {
-        console.log('📦 Загружен последний результат из storage:', lastState);
-        showLastSearchResult(lastState);
+        resultToShow = lastState;
         // Восстанавливаем параметры из последнего поиска
         if (lastState.criteria) {
           restoreSearchParams(lastState.criteria);
         }
       }
-      return;
+      
+      if (lastStatus) {
+        statusToShow = lastStatus;
+      }
+      
+      searchStageMsg.textContent = '✅ Статус поиска получен';
+      searchStageMsg.style.color = '';
+      
+      return { lastSearchResult: resultToShow, currentStatus: statusToShow };
     }
-    
-    const tab = tabs[0];
-    currentTabId = tab.id;
     
     // Запрашиваем у background статус поиска
     const response = await chromeAdapter.sendMessage(MESSAGE_TYPES.CHECK_SEARCH_STATUS, {
-      tabId: tab.id
+      tabId: currentTabId
     });
     
     if (response?.isSearching) {
       console.log('🔍 Обнаружен активный поиск, восстанавливаем UI');
       startSearchUI();
-      const state = response.searchState;
-      if (state) {
-        showStatus(`🔍 Поиск запущен... Проверено: ${state.ticketsChecked}`);
-        // Восстанавливаем параметры текущего поиска
-        if (state.criteria) {
-          restoreSearchParams(state.criteria);
-        }
-      } else {
-        showStatus('🔍 Поиск запущен...');
+      
+      // Показываем текущий статус активного поиска
+      if (lastStatus) {
+        statusToShow = lastStatus;
+      }
+      
+      // Показываем результат ПРЕДЫДУЩЕГО завершенного поиска
+      if (lastState && lastState.status !== 'running') {
+        resultToShow = lastState;
+      }
+      
+      // Восстанавливаем параметры текущего поиска
+      if (response.searchState?.criteria) {
+        restoreSearchParams(response.searchState.criteria);
       }
     } else {
-      // Поиск не активен - восстанавливаем из последнего состояния
+      // Поиск не активен - восстанавливаем результат последнего поиска
       if (response?.searchState) {
-        showLastSearchResult(response.searchState);
+        resultToShow = response.searchState;
         if (response.searchState.criteria) {
           restoreSearchParams(response.searchState.criteria);
         }
-      } else {
-        // Если нет в памяти, загружаем из storage
-        const lastState = await chromeAdapter.getLocal('lastSearchState');
-        if (lastState) {
-          console.log('📦 Загружен последний результат из storage:', lastState);
-          showLastSearchResult(lastState);
-          if (lastState.criteria) {
-            restoreSearchParams(lastState.criteria);
-          }
+      } else if (lastState) {
+        // Если нет в памяти, используем из storage
+        resultToShow = lastState;
+        if (lastState.criteria) {
+          restoreSearchParams(lastState.criteria);
         }
       }
+      
+      // Показываем последний статус если есть
+      if (lastStatus) {
+        statusToShow = lastStatus;
+      }
     }
+    
+    searchStageMsg.textContent = '✅ Статус поиска получен';
+    searchStageMsg.style.color = '';
+    
+    return { lastSearchResult: resultToShow, currentStatus: statusToShow };
+    
   } catch (error) {
-    console.error('❌ Ошибка проверки активного поиска:', error);
+    console.error('❌ Ошибка проверки этапа поиска:', error);
+    searchStageMsg.textContent = '⚠️ Ошибка получения статуса поиска';
+    searchStageMsg.style.color = 'orange';
+    return null;
   }
 }
 
 // Показать результат последнего поиска из состояния
 function showLastSearchResult(state) {
-  if (!state || state.status === 'running') return;
+  if (!state) return;
   
   let resultText = '';
   
+  // Форматируем дату-время
+  let dateTimeStr = '';
+  if (state.stoppedAt) {
+    const date = new Date(state.stoppedAt);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    dateTimeStr = `${day}.${month}.${year} ${hours}:${minutes}`;
+  }
+  
+  // Формируем текст в зависимости от статуса
   switch (state.status) {
+    case 'running':
+      // Поиск был прерван, показываем последний прогресс
+      resultText = `⚠️ Поиск был прерван`;
+      resultText += `\n📊 Проверено: ${state.ticketsChecked || 0}`;
+      break;
+      
     case 'completed':
-      resultText = `✅ Последний поиск: ${state.message} (проверено: ${state.ticketsChecked})`;
+      resultText = `✅ Завершен успешно`;
+      if (dateTimeStr) resultText += ` (${dateTimeStr})`;
+      resultText += `\n📊 Проверено: ${state.ticketsChecked}`;
+      resultText += ` | Найдено: ${state.ticketsFound}`;
+      if (state.ticketsPurchased > 0) {
+        resultText += ` | Куплено: ${state.ticketsPurchased}`;
+      }
       break;
+      
     case 'stopped':
-      resultText = `⏸️ Последний поиск: ${state.message} (проверено: ${state.ticketsChecked})`;
+      resultText = `⏸️ Остановлен пользователем`;
+      if (dateTimeStr) resultText += ` (${dateTimeStr})`;
+      resultText += `\n📊 Проверено: ${state.ticketsChecked}`;
+      if (state.ticketsPurchased > 0) {
+        resultText += ` | Куплено: ${state.ticketsPurchased}`;
+      }
       break;
+      
     case 'error':
-      resultText = `❌ Последний поиск: ${state.message} (проверено: ${state.ticketsChecked})`;
+      resultText = `❌ Завершен с ошибкой`;
+      if (dateTimeStr) resultText += ` (${dateTimeStr})`;
+      resultText += `\n📊 Проверено: ${state.ticketsChecked}`;
+      if (state.errorMessage) {
+        resultText += `\n⚠️ ${state.errorMessage}`;
+      }
       break;
   }
   
@@ -645,69 +732,32 @@ function restoreSearchParams(criteria) {
 
 // Ждем готовности страницы
 async function waitForPageReady() {
-  console.log('⏳ Ждем готовности страницы Столото...');
+  console.log('⏳ Ждем загрузки страницы Столото...');
   
-  // Ищем вкладку Столото
-  const tabs = await chrome.tabs.query({ url: 'https://www.stoloto.ru/ruslotto/game*' });
-  
-  if (tabs.length === 0) {
+  if (!currentTabId) {
     pageLoadingMsg.textContent = '⚠️ Откройте страницу Столото';
-    console.log('⚠️ Вкладка Столото не найдена');
+    console.log('⚠️ currentTabId не установлен');
     return;
   }
   
-  const tab = tabs[0];
-  
-  // Проверяем готовность страницы - ждем пока появится интерфейс
+  // Опрашиваем content script каждые 500ms
   let attempts = 0;
-  const maxAttempts = 30; // 30 попыток по 500мс = 15 секунд максимум
-  let ready = false;
+  const maxAttempts = 30; // 30 × 500ms = 15 секунд
   
-  while (attempts < maxAttempts && !ready) {
+  while (attempts < maxAttempts) {
     try {
-      // Проверяем готовность страницы: кнопки + баланс (если авторизован)
-      const result = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const allButtons = Array.from(document.querySelectorAll('button'));
-          
-          // Ищем кнопку "Выбрать числа"
-          const selectBtn = allButtons.find(b => b.textContent.trim() === 'Выбрать числа');
-          if (!selectBtn) {
-            // Или ищем кнопку редактирования (с SVG иконкой change)
-            const editBtn = allButtons.find(b => {
-              const svg = b.querySelector('svg use[href*="change"]');
-              return !!svg;
-            });
-            
-            if (!editBtn) return false;
-          }
-          
-          // Проверяем авторизацию через cookie
-          const cookies = document.cookie.split(';').map(c => c.trim());
-          const gaCookie = cookies.find(c => c.startsWith('ga='));
-          const isAuthorized = !!gaCookie;
-          
-          // Если авторизован, проверяем что баланс загрузился
-          if (isAuthorized) {
-            const walletLink = Array.from(document.querySelectorAll('a'))
-              .find(a => a.href && a.href.includes('/private/wallet') && a.textContent.includes('₽'));
-            
-            // Баланс должен быть виден
-            if (!walletLink) return false;
-          }
-          
-          return true;
-        }
-      });
+      const response = await chromeAdapter.sendMessage(
+        MESSAGE_TYPES.CHECK_PAGE_LOADED,
+        { tabId: currentTabId }
+      );
       
-      if (result && result[0] && result[0].result) {
-        console.log('✅ Интерфейс загружен, страница готова');
-        ready = true;
-        break;
+      if (response?.loaded) {
+        console.log('✅ Страница загружена');
+        pageLoadingMsg.textContent = '✅ Страница загружена';
+        return;
       }
       
-      console.log(`⏳ Попытка ${attempts + 1}/${maxAttempts}... Интерфейс еще не появился`);
+      console.log(`⏳ Попытка ${attempts + 1}/${maxAttempts}... Страница еще загружается`);
     } catch (error) {
       console.log(`⏳ Попытка ${attempts + 1}/${maxAttempts}... Ошибка:`, error.message);
     }
@@ -716,25 +766,17 @@ async function waitForPageReady() {
     attempts++;
   }
   
-  if (!ready) {
-    pageLoadingMsg.textContent = '⚠️ Страница загружается слишком долго';
-    console.log('⚠️ Превышено время ожидания');
-  } else {
-    pageLoadingMsg.textContent = '✅ Страница загружена';
-    // Даем React еще немного времени чтобы точно отрендерить баланс
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
+  pageLoadingMsg.textContent = '⚠️ Страница загружается слишком долго';
+  console.log('⚠️ Превышено время ожидания');
 }
 
-// Проверяем авторизацию
+// Проверяем авторизацию и баланс
 async function checkAuthorization() {
   authCheckMsg.classList.remove('hidden');
+  authCheckMsg.textContent = '⏳ Проверка авторизации...';
   
   try {
-    // Ищем вкладку Столото
-    const tabs = await chrome.tabs.query({ url: 'https://www.stoloto.ru/ruslotto/game*' });
-    
-    if (tabs.length === 0) {
+    if (!currentTabId) {
       authCheckMsg.textContent = '⚠️ Откройте страницу Столото';
       authCheckMsg.style.color = 'orange';
       document.querySelector('#ticketsToBuy').closest('.field').style.display = 'none';
@@ -742,20 +784,31 @@ async function checkAuthorization() {
       return;
     }
     
-    const tab = tabs[0];
-    console.log('📋 Вкладка Столото:', tab.id);
+    console.log('🔐 Проверяем авторизацию на вкладке:', currentTabId);
     
-    const response = await chromeAdapter.sendMessageToTab(tab.id, MESSAGE_TYPES.GET_USER_DATA, {});
-    console.log('📨 Ответ от content:', response);
+    // Отправляем один запрос и ждем ответа
+    const response = await chromeAdapter.sendMessage(
+      MESSAGE_TYPES.GET_USER_DATA,
+      { tabId: currentTabId }
+    );
     
-    if (response.success) {
-      const userData = response.data;
-      console.log('👤 UserData:', userData);
+    console.log('📨 Ответ от background:', response);
+    
+    if (!response) {
+      throw new Error('Нет ответа от content script');
+    }
+    
+    const userData = response;
+    console.log('👤 UserData:', userData);
+    
+    if (userData.isAuthorized) {
+      console.log('✅ Пользователь авторизован, баланс:', userData.balance);
+      userBalance = userData.balance;
       
-      if (userData.isAuthorized) {
-        userBalance = userData.balance; // Сохраняем баланс
-        authCheckMsg.textContent = `✅ Авторизован. Баланс: ${userData.balance}₽`;
-        
+      authCheckMsg.textContent = `✅ Авторизован. Баланс: ${userBalance}₽`;
+      authCheckMsg.style.color = '';
+      
+      if (userBalance > 0) {
         // Устанавливаем максимум для поля
         const maxTickets = Math.floor(userBalance / TICKET_PRICE);
         ticketsToBuyInput.max = maxTickets;
@@ -768,28 +821,42 @@ async function checkAuthorization() {
           validateTicketsToBuy(ticketsToBuyInput);
         }
       } else {
-        authCheckMsg.textContent = '❌ Не авторизован. Войдите на сайте.';
-        authCheckMsg.style.color = 'red';
-        // Скрываем поле покупки
+        // Баланс 0 - скрываем поле покупки
         document.querySelector('#ticketsToBuy').closest('.field').style.display = 'none';
         ticketsToBuyInput.value = '0';
       }
+    } else {
+      console.log('❌ Пользователь не авторизован');
+      authCheckMsg.textContent = '❌ Не авторизован. Войдите на сайте.';
+      authCheckMsg.style.color = 'red';
+      document.querySelector('#ticketsToBuy').closest('.field').style.display = 'none';
+      ticketsToBuyInput.value = '0';
     }
+    
   } catch (error) {
     console.error('❌ Ошибка проверки авторизации:', error);
     authCheckMsg.textContent = '⚠️ Ошибка проверки авторизации';
-    // Скрываем поле покупки при ошибке
+    authCheckMsg.style.color = 'orange';
     document.querySelector('#ticketsToBuy').closest('.field').style.display = 'none';
     ticketsToBuyInput.value = '0';
   }
 }
 
 // Показать форму поиска
-function showSearchForm() {
-  setTimeout(() => {
-    loadingStatus.classList.add('hidden');
-    searchForm.classList.remove('hidden');
-  }, 1000);
+function showSearchForm(statuses) {
+  // Сначала вставляем статусы в форму
+  if (statuses) {
+    if (statuses.lastSearchResult) {
+      showLastSearchResult(statuses.lastSearchResult);
+    }
+    if (statuses.currentStatus) {
+      showStatus(statuses.currentStatus);
+    }
+  }
+  
+  // Потом показываем форму
+  loadingStatus.classList.add('hidden');
+  searchForm.classList.remove('hidden');
 }
 
 

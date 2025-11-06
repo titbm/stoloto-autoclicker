@@ -14,18 +14,29 @@ export class PurchaseTickets {
     this.isResuming = isResuming; // Флаг что это продолжение после перезагрузки
   }
 
+  async sendStatus(status) {
+    await this.chromeAdapter.saveLocal('lastSearchStatus', status);
+    await this.chromeAdapter.sendMessage(MESSAGE_TYPES.SEARCH_STATUS, {
+      status: status
+    }).catch(() => {});
+  }
+
   async execute(criteria, totalTicketsToBuy) {
     console.log('🛒 PurchaseTickets.execute начат');
     console.log('📝 Критерии:', criteria);
     console.log('🎫 Нужно купить билетов:', totalTicketsToBuy);
     
     let ticketsPurchased = 0;
+    let totalTicketsChecked = 0; // Накопленный счетчик проверенных билетов
+    let totalTicketsFound = 0; // Накопленный счетчик найденных билетов
     
-    // Пытаемся восстановить состояние покупки
+    // Пытаемся восстановить состояние покупки (после перезагрузки страницы)
     const savedState = await this.chromeAdapter.getLocal('purchaseState');
     if (savedState && savedState.tabId === this.tabId) {
       ticketsPurchased = savedState.ticketsPurchased || 0;
-      console.log('📦 Восстановлено состояние: куплено', ticketsPurchased, 'из', totalTicketsToBuy);
+      totalTicketsChecked = savedState.ticketsChecked || 0;
+      totalTicketsFound = savedState.ticketsFound || 0;
+      console.log('📦 Восстановлено состояние: куплено', ticketsPurchased, 'из', totalTicketsToBuy, ', проверено', totalTicketsChecked, ', найдено', totalTicketsFound);
     }
     
     // Цикл покупки
@@ -39,9 +50,16 @@ export class PurchaseTickets {
       // Первый цикл - без задержки, последующие - с задержкой 20 сек
       const reloadDelay = ticketsPurchased > 0 ? 20000 : 0;
       
+      if (reloadDelay > 0) {
+        await this.sendStatus(`⏳ Ожидаем перезагрузку через 20 секунд чтобы найти еще ${ticketsNeeded} билетов...`);
+      }
+      
       // Используем SearchTickets для поиска
       const searchTickets = new SearchTickets(this.chromeAdapter, this.tabId, this.session);
-      const searchResult = await searchTickets.execute(criteria, ticketsNeeded, reloadDelay);
+      const searchResult = await searchTickets.execute(criteria, ticketsNeeded, reloadDelay, totalTicketsChecked);
+      
+      // Обновляем общий счетчик проверенных билетов
+      totalTicketsChecked = searchResult.ticketsChecked;
       
       if (searchResult.stopped) {
         console.log('⏸️ Поиск остановлен пользователем');
@@ -49,7 +67,8 @@ export class PurchaseTickets {
           success: false,
           ticketsPurchased,
           stopped: true,
-          ticketsChecked: searchResult.ticketsChecked
+          ticketsChecked: totalTicketsChecked,
+          ticketsFound: totalTicketsFound
         };
       }
       
@@ -59,16 +78,21 @@ export class PurchaseTickets {
           success: false,
           ticketsPurchased,
           error: 'Билеты не найдены',
-          ticketsChecked: searchResult.ticketsChecked
+          ticketsChecked: totalTicketsChecked,
+          ticketsFound: totalTicketsFound
         };
       }
       
       // Найдены билеты - кликнули ровно столько сколько нужно
-      const ticketsToTake = searchResult.tickets.length;
-      console.log(`✅ Найдено и кликнуто ${ticketsToTake} билетов`);
+      const ticketsToTake = searchResult.tickets.length; // Кликнуто
+      const ticketsFoundNow = searchResult.totalMatchingTickets || ticketsToTake; // Всего найдено
+      totalTicketsFound += ticketsFoundNow; // Накапливаем найденные билеты
+      console.log(`✅ Найдено ${ticketsFoundNow} подходящих, кликнуто ${ticketsToTake} (всего найдено: ${totalTicketsFound})`);
       
       // Билеты уже кликнуты в SearchTickets, ждём появления кнопок оплаты
       console.log('⏳ Ждём появления кнопок оплаты...');
+      await this.sendStatus('⏳ Ждём появления кнопки оплаты...');
+      
       let paymentStatus = null;
       let attempts = 0;
       const maxAttempts = 10;
@@ -88,6 +112,7 @@ export class PurchaseTickets {
           
           if (paymentStatus.data.walletPaymentAvailable) {
             console.log('✅ Кнопка оплаты найдена!');
+            await this.sendStatus('✅ Кнопка оплаты найдена!');
             break;
           }
           
@@ -132,33 +157,49 @@ export class PurchaseTickets {
       // РЕЖИМ ТЕСТИРОВАНИЯ: проверяем переменную окружения
       const testMode = await this.chromeAdapter.getLocal('testMode');
       
-      if (testMode) {
-        console.log('🧪 ТЕСТОВЫЙ РЕЖИМ: имитируем клик на кнопку оплаты (реальный клик НЕ выполняется)');
-      } else {
-        // Нажимаем кнопку оплаты
-        console.log('💳 Оплачиваем билеты');
-        try {
-          await this.chromeAdapter.sendMessageToTab(
-            this.tabId,
-            MESSAGE_TYPES.CLICK_PAYMENT_BUTTON,
-            {}
-          );
+      // Открываем панель оплаты (в тестовом режиме тоже)
+      console.log('💳 Открываем панель оплаты');
+      await this.sendStatus(testMode 
+        ? `🧪 ТЕСТОВЫЙ РЕЖИМ: открываем панель оплаты для ${ticketsToTake} билетов` 
+        : `💳 Оплачиваем ${ticketsToTake} билетов...`
+      );
+      
+      try {
+        await this.chromeAdapter.sendMessageToTab(
+          this.tabId,
+          MESSAGE_TYPES.CLICK_PAYMENT_BUTTON,
+          { testMode: testMode }
+        );
+        
+        if (testMode) {
+          console.log('🧪 ТЕСТОВЫЙ РЕЖИМ: панель оплаты открыта, финальный клик НЕ выполнен');
+        } else {
           console.log('✅ Клик на кнопку оплаты выполнен');
-        } catch (error) {
-          console.error('❌ Ошибка при клике на кнопку оплаты:', error);
-          // НЕ бросаем исключение - клик мог быть выполнен, просто content script умер
-          console.log('⚠️ Игнорируем ошибку - клик скорее всего выполнен');
         }
+      } catch (error) {
+        console.error('❌ Ошибка при клике на кнопку оплаты:', error);
+        // НЕ бросаем исключение - клик мог быть выполнен, просто content script умер
+        console.log('⚠️ Игнорируем ошибку - клик скорее всего выполнен');
       }
       
       ticketsPurchased += ticketsToTake;
       console.log(`✅ Куплено билетов: ${ticketsPurchased}/${totalTicketsToBuy}`);
+      await this.sendStatus(`✅ Куплено билетов: ${ticketsPurchased}/${totalTicketsToBuy}`);
+      
+      // Обновляем searchState в background
+      await this.chromeAdapter.sendMessage(MESSAGE_TYPES.PURCHASE_PROGRESS, {
+        tabId: this.tabId,
+        ticketsPurchased: ticketsPurchased,
+        ticketsFound: totalTicketsFound
+      }).catch(() => {});
       
       // Сохраняем состояние ПОСЛЕ клика
       await this.chromeAdapter.saveLocal('purchaseState', {
         tabId: this.tabId,
         ticketsPurchased,
         totalTicketsToBuy,
+        ticketsChecked: totalTicketsChecked,
+        ticketsFound: totalTicketsFound,
         criteria,
         timestamp: Date.now()
       });
@@ -169,12 +210,17 @@ export class PurchaseTickets {
     
     // Покупка завершена (все билеты куплены без перезагрузки)
     console.log('🎉 Покупка завершена!');
+    await this.sendStatus(`🎉 Покупка завершена! Куплено: ${ticketsPurchased}`);
     await this.chromeAdapter.saveLocal('purchaseState', null); // Очищаем состояние
     
     return {
       success: true,
       ticketsPurchased,
-      stopped: false
+      stopped: false,
+      found: true, // Важно! Чтобы background остановил UI
+      tickets: [], // Пустой массив, т.к. все билеты куплены
+      ticketsChecked: totalTicketsChecked,
+      ticketsFound: totalTicketsFound
     };
   }
 }
