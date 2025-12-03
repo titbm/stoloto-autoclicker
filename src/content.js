@@ -48,7 +48,7 @@ function getTickets() {
   }
 
   return ticketButtons.map(btn => {
-    const ticketId = btn.textContent.match(/Билет №(\d+)/)?.[1];
+    const ticketId = btn.textContent.match(/Билет\s*№\s*(\d+)/)?.[1];
     const numbers = extractNumbers(btn);
 
     if (!ticketId || numbers.length !== LIMITS.NUMBERS_PER_TICKET) {
@@ -129,7 +129,10 @@ function getUserDataAsync() {
 
 function clickTicket(ticketId) {
   const btn = Array.from(document.querySelectorAll('button'))
-    .find(btn => btn.textContent.includes(`Билет №${ticketId}`));
+    .find(btn => {
+      const match = btn.textContent.match(/Билет\s*№\s*(\d+)/);
+      return match && match[1] === ticketId;
+    });
 
   if (!btn) {
     throw new Error(`Билет №${ticketId} не найден`);
